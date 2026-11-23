@@ -5,7 +5,7 @@ import { type Action, type Game, type GameEvent, type Phase, actionKey } from ".
 export interface TableView {
   /** Changes whenever a new game is dealt. */
   gameId: string;
-  rules: { multiPlay: boolean; stackDraws: boolean };
+  rules: { multiPlay: boolean; stackDraws: boolean; numberFinish: boolean };
   /** Seat the viewer controls, or null when only watching. */
   you: number | null;
   /** Seat drawn at the bottom of the table. */
@@ -39,7 +39,7 @@ export function viewFromGame(
   const yourTurn = o.you !== null && !g.isOver && g.current === o.you;
   return {
     gameId: `${g.seed}:${g.uid}`,
-    rules: { multiPlay: g.rules.multiPlay, stackDraws: g.rules.stackDraws },
+    rules: { multiPlay: g.rules.multiPlay, stackDraws: g.rules.stackDraws, numberFinish: g.rules.numberFinish },
     you: o.you,
     bottom: o.you ?? 0,
     names: o.names,

@@ -108,7 +108,7 @@ describe("rules", () => {
 });
 
 describe("house rules", () => {
-  const house = { multiPlay: true, stackDraws: true };
+  const house = { multiPlay: true, stackDraws: true, numberFinish: true };
   it("multi-play: same number in different colors, last card sets the color", () => {
     const g = setup(["red:5", "blue:5", "green:5", "yellow:1"], ["red:1"], "red:2", { rules: house });
     g.step(play("red:5"));
@@ -158,14 +158,15 @@ describe("house rules", () => {
     // Player 0 has no draw card, so they draw 4 and player 1 goes again.
     expect([g.hands[0].length, g.current, g.pendingDraw]).toEqual([5, 1, 0]);
   });
-  it("+4 can be stacked on +2 (choosing a color); +2 can't go on +4", () => {
-    const g = setup(["red:draw2", "blue:draw2", "yellow:1"], ["wild4", "green:1"], "red:2", { rules: house });
+  it("like on like only: no +4 on a +2, no +2 on a +4", () => {
+    let g = setup(["red:draw2", "yellow:1"], ["wild4", "green:1"], "red:2", { rules: house });
     g.step(play("red:draw2"));
-    g.step({ type: "done" });
+    // Player 1 only has a +4, which can't answer a +2: they draw 2 at once.
+    expect([g.hands[1].length, g.current, g.pendingDraw]).toEqual([4, 0, 0]);
+
+    g = setup(["wild4", "yellow:1"], ["blue:draw2", "green:1"], "red:2", { rules: { ...house, allowWd4Challenge: false } });
     g.step(play("wild4", "green"));
-    // A stacked +4 can't be challenged and a +2 can't answer a +4, so with no
-    // choice to make player 0 draws all 6 at once and player 1 goes again.
-    expect([g.hands[0].length, g.current, g.pendingDraw, g.color]).toEqual([8, 1, 0, "green"]);
+    expect([g.hands[1].length, g.current]).toEqual([6, 0]);
   });
   it("a challengeable +4 can be answered by challenge, accept or a stack", () => {
     const g = setup(["wild4", "red:1"], ["wild4", "green:1"], "red:5", { rules: house });
@@ -177,9 +178,34 @@ describe("house rules", () => {
     expect([g.hands[0].length, g.current]).toEqual([5, 1]);
   });
   it("going out on a +2 still makes the opponent draw", () => {
-    const g = setup(["red:draw2"], ["blue:draw2", "green:1"], "red:5", { rules: house, draw: ["yellow:9", "yellow:8"] });
+    const g = setup(["red:draw2"], ["blue:draw2", "green:1"], "red:5", { rules: { stackDraws: true }, draw: ["yellow:9", "yellow:8"] });
     g.step(play("red:draw2"));
     expect([g.winner, g.hands[1].length]).toEqual([0, 4]);
+  });
+  it("number finish: an action card can't be your last card", () => {
+    for (const last of ["red:skip", "red:reverse", "red:draw2", "wild", "wild4"]) {
+      const g = setup([last], ["green:1"], "red:5", { rules: house });
+      expect(g.legalActions()).toEqual([{ type: "draw" }]);
+    }
+    const g = setup(["red:7"], ["green:1"], "red:5", { rules: house });
+    g.step(play("red:7"));
+    expect(g.winner).toBe(0);
+  });
+  it("number finish: can't empty the hand with a run of action cards", () => {
+    // Two +2s: the first is fine, the second would be the last card.
+    let g = setup(["red:draw2", "blue:draw2"], ["green:1"], "red:5", { rules: house });
+    g.step(play("red:draw2"));
+    expect(g.hands[0]).toEqual(["blue:draw2"]);
+    expect(g.winner).toBe(null);
+    // A Skip leaves a lone action card: on the extra turn the player must draw.
+    g = setup(["red:skip", "red:reverse"], ["green:1"], "red:5", { rules: house });
+    g.step(play("red:skip"));
+    expect([g.current, g.legalActions()]).toEqual([0, [{ type: "draw" }]]);
+  });
+  it("number finish: you can't stack with your last card", () => {
+    const g = setup(["red:draw2", "yellow:1"], ["blue:draw2"], "red:2", { rules: house });
+    g.step(play("red:draw2"));
+    expect([g.hands[1].length, g.current]).toEqual([3, 0]);
   });
   it("bots finish games and conserve cards under house rules", () => {
     for (let s = 0; s < 200; s++) {
@@ -213,10 +239,10 @@ describe("simulation", () => {
     expect(Math.abs(g.winRate[0] - 0.5)).toBeLessThan(0.04);
     expect(g.turnsMean).toBeGreaterThan(28);
     expect(g.turnsMean).toBeLessThan(36);
-    // Python with both house rules: heuristic vs greedy ~49%, ~22 turns.
+    // Python with all house rules: heuristic vs greedy ~48%, ~27 turns.
     const h = summarize(await runMatch({ p0: "heuristic", p1: "greedy", games: 3000, seed: 3, rules: HOUSE_RULES }));
-    expect(Math.abs(h.winRate[0] - 0.5)).toBeLessThan(0.04);
-    expect(h.turnsMean).toBeGreaterThan(20);
-    expect(h.turnsMean).toBeLessThan(25);
+    expect(Math.abs(h.winRate[0] - 0.49)).toBeLessThan(0.04);
+    expect(h.turnsMean).toBeGreaterThan(24);
+    expect(h.turnsMean).toBeLessThan(30);
   });
 });

@@ -27,6 +27,7 @@ def _rules(args) -> Rules:
         allow_wd4_challenge=not args.no_challenge,
         multi_play=args.multi_play or args.house,
         stack_draws=args.stack_draws or args.house,
+        number_finish=args.number_finish or args.house,
         max_turns=args.max_turns,
     )
 
@@ -173,7 +174,9 @@ def main(argv=None) -> None:
                        help="house rule: play several cards of the same rank in one turn")
         g.add_argument("--stack-draws", action="store_true",
                        help="house rule: stack +2/+4 cards to pass the penalty on")
-        g.add_argument("--house", action="store_true", help="both house rules")
+        g.add_argument("--number-finish", action="store_true",
+                       help="house rule: you can only go out on a number card")
+        g.add_argument("--house", action="store_true", help="all three house rules")
         g.add_argument("--max-turns", type=int, default=1000)
 
     choices = sorted(AGENTS)

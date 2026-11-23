@@ -13,8 +13,10 @@ Two-player rule specifics (official rules):
 House rules (off by default, see ``Rules``):
   * multi_play: after playing a card you may add more cards of the same rank
     (any color) in the same turn. Draw cards add up: two +2s = draw 4.
-  * stack_draws: when hit by a +2 you may answer with a +2 or +4, and when hit
-    by a +4 you may answer with a +4; the total passes to the other player.
+  * stack_draws: when hit by a +2 you may answer with a +2, and when hit by a
+    +4 with a +4; the total passes to the other player.
+  * number_finish: you can only go out on a number card. An action card
+    (Skip, Reverse, +2, wilds) can't be your last card.
 """
 from __future__ import annotations
 
@@ -82,6 +84,7 @@ class Rules:
     # House rules.
     multi_play: bool = False
     stack_draws: bool = False
+    number_finish: bool = False
     # Safety valve against (extremely rare) endless games.
     max_turns: int = 1000
 
@@ -273,7 +276,16 @@ class Game:
         return [Action(ActionType.PLAY, card)]
 
     # ------------------------------------------------------------- public API
+    def _finish_ok(self, p: int, card: Card) -> bool:
+        """With number_finish, an action card can't be a player's last card."""
+        return not self.rules.number_finish or len(self.hands[p]) > 1 or card.rank.is_number
+
     def legal_actions(self) -> List[Action]:
+        p = self.current_player
+        return [a for a in self._all_actions()
+                if a.type is not ActionType.PLAY or self._finish_ok(p, a.card)]
+
+    def _all_actions(self) -> List[Action]:
         if self.phase is Phase.OVER:
             return []
         if self.phase is Phase.RESPOND:
@@ -358,9 +370,10 @@ class Game:
         """Draw cards ``p`` may stack on the pending penalty."""
         if not self.rules.stack_draws:
             return []
-        top_is_draw2 = self.top_card.rank is Rank.DRAW_TWO
+        # Like on like only: +2 on +2, +4 on +4.
+        top = self.top_card.rank
         return [c for c in sorted(set(self.hands[p]))
-                if c.rank is Rank.WILD_DRAW_FOUR or (c.rank is Rank.DRAW_TWO and top_is_draw2)]
+                if c.rank is top and self._finish_ok(p, c)]
 
     def _play(self, p: int, action: Action) -> None:
         card = action.card

@@ -154,7 +154,7 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(g.stats.reshuffles, 1)
 
 
-HOUSE = Rules(multi_play=True, stack_draws=True)
+HOUSE = Rules(multi_play=True, stack_draws=True, number_finish=True)
 
 
 class HouseRuleTests(unittest.TestCase):
@@ -203,13 +203,20 @@ class HouseRuleTests(unittest.TestCase):
         g.step(Action(ActionType.PLAY, Card(Rank.DRAW_TWO, B)))
         self.assertEqual((len(g.hands[0]), g.current_player, g.pending_draw), (5, 1, 0))
 
-    def test_wd4_on_draw_two_and_no_draw_two_on_wd4(self):
-        g = setup([Card(Rank.DRAW_TWO, R), Card(Rank.DRAW_TWO, B), Card(Rank.ONE, Y)],
-                  [Card(Rank.WILD_DRAW_FOUR), Card(Rank.ONE, G)], Card(Rank.TWO, R), rules=HOUSE)
+    def test_like_on_like_only(self):
+        g = setup([Card(Rank.DRAW_TWO, R), Card(Rank.ONE, Y)], [Card(Rank.WILD_DRAW_FOUR), Card(Rank.ONE, G)],
+                  Card(Rank.TWO, R), rules=HOUSE)
         g.step(Action(ActionType.PLAY, Card(Rank.DRAW_TWO, R)))
-        g.step(DONE)
-        g.step(Action(ActionType.PLAY, Card(Rank.WILD_DRAW_FOUR), G))
-        self.assertEqual((len(g.hands[0]), g.current_player, g.current_color), (8, 1, G))
+        self.assertEqual((len(g.hands[1]), g.current_player, g.pending_draw), (4, 0, 0))
+
+    def test_number_finish(self):
+        for last in (Card(Rank.SKIP, R), Card(Rank.REVERSE, R), Card(Rank.DRAW_TWO, R),
+                     Card(Rank.WILD), Card(Rank.WILD_DRAW_FOUR)):
+            g = setup([last], [Card(Rank.ONE, G)], Card(Rank.FIVE, R), rules=HOUSE)
+            self.assertEqual(g.legal_actions(), [DRAW])
+        g = setup([Card(Rank.SEVEN, R)], [Card(Rank.ONE, G)], Card(Rank.FIVE, R), rules=HOUSE)
+        g.step(Action(ActionType.PLAY, Card(Rank.SEVEN, R)))
+        self.assertEqual(g.winner, 0)
 
     def test_challengeable_wd4_can_be_stacked(self):
         g = setup([Card(Rank.WILD_DRAW_FOUR), Card(Rank.ONE, R)], [Card(Rank.WILD_DRAW_FOUR), Card(Rank.ONE, G)],

@@ -78,7 +78,12 @@ export function Table({ view: v, onActions, busy, status, seatExtra, gameOverAct
   const myHand = useMemo(() => keyCards(sortHand(v.hands[v.bottom] ?? [])), [v.hands, v.bottom]);
   const last = selected[selected.length - 1];
   const isSelected = (k: string) => selected.some((s) => s.key === k);
-  const followable = (k: Keyed) => !!last && !isSelected(k.key) && canFollow(last.card, k.card, v.rules.multiPlay);
+  /** With numberFinish, an action card can't be the card that empties your hand. */
+  const finishOk = (card: CardId, cardsLeftAfter: number) =>
+    !v.rules.numberFinish || cardsLeftAfter > 0 || /^\d$/.test(parseCard(card).rank);
+  const followable = (k: Keyed) =>
+    !!last && !isSelected(k.key) && canFollow(last.card, k.card, v.rules.multiPlay) &&
+    finishOk(k.card, myHand.length - selected.length - 1);
 
   const playChain = (cards: CardId[]) => {
     if (cards.some((c) => isWild(parseCard(c).rank))) return setWildChain(cards);
@@ -104,7 +109,7 @@ export function Table({ view: v, onActions, busy, status, seatExtra, gameOverAct
     const rank = parseCard(k.card).rank;
     const extraTurn = rank === "skip" || rank === "reverse";
     const hasPartner = (v.rules.multiPlay || extraTurn) &&
-      myHand.some((o) => o.key !== k.key && parseCard(o.card).rank === rank);
+      myHand.some((o) => o.key !== k.key && parseCard(o.card).rank === rank && finishOk(o.card, myHand.length - 2));
     if (hasPartner && v.phase !== "multi") setSelected([k]);
     else playChain([k.card]);
   };
@@ -129,6 +134,8 @@ export function Table({ view: v, onActions, busy, status, seatExtra, gameOverAct
       if (v.phase === "drew") statusText = `You drew ${aOrAn(cardLabel(v.pending!))}. Play it or keep it.`;
       else if (v.phase === "respond") statusText = respondText(v, opp, legalByCard.size > 0, !!challenge);
       else if (v.phase === "multi") statusText = `Play another ${rankName(parseCard(v.top).rank)}, or end your turn.`;
+      else if (!legalByCard.size && v.rules.numberFinish && myHand.length === 1 && !/^\d$/.test(parseCard(myHand[0].card).rank))
+        statusText = "You can only go out on a number card. Draw a card.";
       else if (goesAgain(v)) statusText = legalByCard.size ? "You go again. Pick a card, or draw." : "You go again, but nothing matches. Draw a card.";
       else statusText = legalByCard.size ? "Your turn. Pick a card, or draw." : "No playable cards. Draw from the deck.";
     } else statusText = `${playerName(v, v.current)} ${v.you === null ? "to move" : "is thinking…"}`;

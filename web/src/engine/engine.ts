@@ -12,10 +12,12 @@
  *    (any color) in the same turn. Draw cards add up: two +2s = draw 4.
  *    (Skip/Reverse don't need it: they give another turn, where any matching
  *    card can follow.)
- *  - stackDraws: when hit by a +2 you may answer with a +2 or +4, and when hit
- *    by a +4 you may answer with a +4; the total passes to the other player.
+ *  - stackDraws: when hit by a +2 you may answer with a +2, and when hit by a
+ *    +4 with a +4; the total passes to the other player.
+ *  - numberFinish: you can only go out on a number card. An action card
+ *    (Skip, Reverse, +2, wilds) can't be your last card.
  */
-import { COLORS, type CardId, type Color, buildDeck, isWild, matches, parseCard, points } from "./cards";
+import { COLORS, type CardId, type Color, buildDeck, isNumber, isWild, matches, parseCard, points } from "./cards";
 import { Rng } from "./rng";
 
 /** turn: play or draw · drew: play the drawn card or keep it · multi: add more
@@ -39,6 +41,7 @@ export interface Rules {
   allowWd4Challenge: boolean;
   multiPlay: boolean;
   stackDraws: boolean;
+  numberFinish: boolean;
   maxTurns: number;
 }
 
@@ -50,11 +53,12 @@ export const DEFAULT_RULES: Rules = {
   allowWd4Challenge: true,
   multiPlay: false,
   stackDraws: false,
+  numberFinish: false,
   maxTurns: 1000,
 };
 
 /** The house rules this app plays by default. */
-export const HOUSE_RULES: Rules = { ...DEFAULT_RULES, multiPlay: true, stackDraws: true };
+export const HOUSE_RULES: Rules = { ...DEFAULT_RULES, multiPlay: true, stackDraws: true, numberFinish: true };
 
 export interface GameEvent {
   t: number;
@@ -264,8 +268,18 @@ export class Game {
       : [{ type: "play", card }];
   }
 
+  /** With numberFinish, an action card can't be a player's last card. */
+  private finishOk(p: number, card: CardId): boolean {
+    return !this.rules.numberFinish || this.hands[p].length > 1 || isNumber(parseCard(card).rank);
+  }
+
   // ------------------------------------------------------------ public API
   legalActions(): Action[] {
+    const p = this.current;
+    return this.allActions().filter((a) => a.type !== "play" || this.finishOk(p, a.card));
+  }
+
+  private allActions(): Action[] {
     if (this.phase === "over") return [];
     if (this.phase === "respond") {
       const out: Action[] = this.canChallenge ? [{ type: "challenge" }, { type: "accept" }] : [{ type: "accept" }];
@@ -332,8 +346,10 @@ export class Game {
   /** Draw cards `p` may stack on the pending penalty. */
   private stackable(p: number): CardId[] {
     if (!this.rules.stackDraws) return [];
+    // Like on like only: +2 on +2, +4 on +4.
     const topRank = parseCard(this.top).rank;
-    return [...new Set(this.hands[p])].sort().filter((c) => c === "wild4" || (c.endsWith(":draw2") && topRank === "draw2"));
+    return [...new Set(this.hands[p])].sort()
+      .filter((c) => parseCard(c).rank === topRank && this.finishOk(p, c));
   }
 
   // ------------------------------------------------------------ mechanics
