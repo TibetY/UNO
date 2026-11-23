@@ -65,6 +65,23 @@ export function useLocalGame(delay: (newEvents: readonly GameEvent[], game: Game
     bump();
   }, []);
 
+  /** Several of the human's moves in a row (cards picked together). */
+  const actMany = useCallback((actions: Action[]) => {
+    const g = game.current;
+    if (!g) return;
+    const me = g.current;
+    if (agents.current[me]) return;
+    for (const action of actions) {
+      if (g.isOver || g.current !== me) break;
+      if (!g.legalActions().some((a) => actionKey(a) === actionKey(action))) break;
+      g.step(action);
+    }
+    // The cards picked were the whole plan: don't wait for more of the same rank.
+    if (!g.isOver && g.current === me && g.phase === "multi") g.step({ type: "done" });
+    finishIfOver();
+    bump();
+  }, []);
+
   const g = game.current;
   const botToMove = !!g && !g.isOver && !!agents.current[g.current];
   const version = g ? g.events.length * 1000 + g.turn : 0;
@@ -77,5 +94,5 @@ export function useLocalGame(delay: (newEvents: readonly GameEvent[], game: Game
     return () => window.clearTimeout(t);
   }, [botToMove, paused, version, stepBot, delay]);
 
-  return { game: g, start, act, stepBot, botToMove };
+  return { game: g, start, act, actMany, stepBot, botToMove };
 }

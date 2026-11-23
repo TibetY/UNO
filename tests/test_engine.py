@@ -169,6 +169,17 @@ class HouseRuleTests(unittest.TestCase):
         g.step(Action(ActionType.PLAY, Card(Rank.FIVE, B)))
         self.assertEqual((g.current_player, g.current_color, g.hands[0]), (1, B, [Card(Rank.ONE, Y)]))
 
+    def test_skip_then_same_color(self):
+        for rank in (Rank.SKIP, Rank.REVERSE):
+            g = setup([Card(rank, R), Card(rank, B), Card(Rank.EIGHT, R), Card(Rank.ONE, G)],
+                      [Card(Rank.ONE, Y)], Card(Rank.TWO, R), rules=HOUSE)
+            g.step(Action(ActionType.PLAY, Card(rank, R)))
+            self.assertEqual((g.phase, g.current_player), (Phase.TURN, 0))
+            cards = [a.card for a in g.legal_actions() if a.type is ActionType.PLAY]
+            self.assertEqual(sorted(cards), sorted([Card(rank, B), Card(Rank.EIGHT, R)]))
+            g.step(Action(ActionType.PLAY, Card(Rank.EIGHT, R)))
+            self.assertEqual(g.current_player, 1)
+
     def test_done_ends_turn_early(self):
         g = setup([Card(Rank.FIVE, R), Card(Rank.FIVE, B), Card(Rank.ONE, Y)], [Card(Rank.ONE, R)],
                   Card(Rank.TWO, R), rules=HOUSE)

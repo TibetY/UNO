@@ -388,7 +388,10 @@ class Game:
                   color=self.current_color.value if self.current_color else None)
 
         won = not self.hands[p]
-        if (not won and self.rules.multi_play
+        # Skip/Reverse already give another turn (where any matching card, the
+        # same rank included, can follow), so they never wait in the multi phase.
+        extra_turn = card.rank in (Rank.SKIP, Rank.REVERSE)
+        if (not won and not extra_turn and self.rules.multi_play
                 and any(c.rank is card.rank for c in self.hands[p])):
             self.phase = Phase.MULTI
             self.pending_card = None

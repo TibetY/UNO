@@ -10,6 +10,8 @@
  * House rules (off by default):
  *  - multiPlay: after playing a card you may add more cards of the same rank
  *    (any color) in the same turn. Draw cards add up: two +2s = draw 4.
+ *    (Skip/Reverse don't need it: they give another turn, where any matching
+ *    card can follow.)
  *  - stackDraws: when hit by a +2 you may answer with a +2 or +4, and when hit
  *    by a +4 you may answer with a +4; the total passes to the other player.
  */
@@ -374,7 +376,10 @@ export class Game {
     this.log("play", p, { card, color: this.color });
 
     const won = this.hands[p].length === 0;
-    if (!won && this.rules.multiPlay && this.hands[p].some((c) => parseCard(c).rank === rank)) {
+    // Skip/Reverse already give another turn (where any matching card, the same
+    // rank included, can follow), so they never wait in the multi phase.
+    const extraTurn = rank === "skip" || rank === "reverse";
+    if (!won && !extraTurn && this.rules.multiPlay && this.hands[p].some((c) => parseCard(c).rank === rank)) {
       this.phase = "multi";
       this.pending = null;
       return;

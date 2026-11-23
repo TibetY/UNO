@@ -121,6 +121,22 @@ describe("house rules", () => {
     expect([g.current, g.color, g.hands[0]]).toEqual([1, "blue", ["yellow:1"]]);
     expect(g.stats.extraCards[0]).toBe(2);
   });
+  it("skip/reverse give another turn at once: same color or same symbol can follow", () => {
+    for (const r of ["skip", "reverse"]) {
+      const g = setup([`red:${r}`, `blue:${r}`, "red:8", "green:1"], ["yellow:1"], "red:2", { rules: house });
+      g.step(play(`red:${r}`));
+      expect([g.phase, g.current]).toEqual(["turn", 0]);
+      const cards = g.legalActions().filter((a) => a.type === "play").map((a) => (a as { card: string }).card);
+      expect(cards).toEqual([`blue:${r}`, "red:8"]);
+      g.step(play("red:8"));
+      expect(g.current).toBe(1);
+    }
+  });
+  it("after a skip with nothing to follow, the player must draw", () => {
+    const g = setup(["red:skip", "green:1"], ["yellow:1"], "red:2", { rules: house });
+    g.step(play("red:skip"));
+    expect(g.legalActions()).toEqual([{ type: "draw" }]);
+  });
   it("multi-play: stop early with done", () => {
     const g = setup(["red:5", "blue:5", "yellow:1"], ["red:1"], "red:2", { rules: house });
     g.step(play("red:5"));

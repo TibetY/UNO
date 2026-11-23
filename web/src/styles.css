@@ -28,7 +28,6 @@
 
   --cw: 92px;
   --radius: 12px;
-  --deal-duration: 480ms;
   color-scheme: dark;
 }
 
@@ -137,31 +136,33 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   content: ""; position: absolute; inset: -14px; border-radius: 22px;
   border: 3px solid var(--ring); box-shadow: 0 0 24px var(--ring); transition: border-color .3s, box-shadow .3s;
 }
+.discard .pile-slot { position: absolute; inset: 0; will-change: transform; }
 .discard .card { position: absolute; inset: 0; }
-.discard .card.top { animation: land .28s ease-out; }
-@keyframes land { from { transform: translateY(-30px) scale(1.12) rotate(var(--rot, 0deg)); opacity: .2; } }
 
 .status { text-align: center; min-height: 24px; font-weight: 600; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
 .actionbar { display: flex; justify-content: center; gap: 10px; min-height: 40px; flex-wrap: wrap; }
 
 /* ---------------- hands ---------------- */
-.hand { display: flex; width: 100%; justify-content: center; align-items: flex-end; min-height: calc(var(--cw) * 1.48 + 14px);
-  padding: 14px 10px 0; }
-.hand-small { min-height: calc(var(--cw) * .78 * 1.48 + 14px); }
-.hand .card { margin-left: var(--overlap, 6px); transition: transform .15s ease, filter .15s, margin .2s; flex: none; }
-.hand .card:first-child { margin-left: 0; }
+.hand { position: relative; display: flex; width: 100%; justify-content: center; align-items: flex-end;
+  min-height: calc(var(--cw) * 1.48 + 14px); padding: 30px 10px 0; }
+.hand-small { min-height: calc(var(--cw) * .78 * 1.48 + 14px); padding-top: 14px; }
+/* Slots carry the motion (gliding, flying in); the card inside carries the lift. */
+.hand .slot { margin-left: var(--overlap, 6px); flex: none; transition: margin .3s ease; will-change: transform; }
+.hand .slot:first-child { margin-left: 0; }
+.hand .card { transition: transform .22s cubic-bezier(.22, .68, .24, 1), filter .2s; }
 .hand-small .card { width: calc(var(--cw) * .78); font-size: calc(var(--cw) * .78); }
 .hand-main .card.playable { cursor: pointer; transform: translateY(-10px); }
-.hand-main .card.playable:hover, .hand-main .card.playable:focus-visible { transform: translateY(-22px); z-index: 5; }
+.hand-main .card.playable:hover, .hand-main .card.playable:focus-visible { transform: translateY(-18px); }
+.hand-main .slot:has(.card.playable:hover), .hand-main .slot:has(.card.selected) { z-index: 5; position: relative; }
+.hand-main .card.selected { cursor: pointer; transform: translateY(-30px); box-shadow: 0 0 0 3px var(--accent), 0 14px 24px rgba(0,0,0,.45); }
 .hand-main .card.dim { filter: brightness(.55) saturate(.7); }
-/* New cards fly in from the deck one after another (delay set per card). */
-.hand .card.fresh { animation: deal var(--deal-duration) cubic-bezier(.2, .75, .25, 1) var(--deal-delay, 0ms) backwards; }
-.hand-main { --deal-from: translate(0, calc(var(--cw) * -2.4)) rotate(-14deg) scale(.7); }
-.hand-small { --deal-from: translate(0, calc(var(--cw) * 1.8)) rotate(10deg) scale(.7); }
-.hand .card.highlight { box-shadow: 0 0 0 3px var(--accent), 0 8px 20px rgba(0,0,0,.4); }
-@keyframes deal { 0% { transform: var(--deal-from); opacity: 0; } 25% { opacity: 1; } }
+.hand .card.highlight { transform: translateY(-26px); box-shadow: 0 0 0 2px rgba(255,255,255,.7), 0 14px 24px rgba(0,0,0,.45); }
+.card .order {
+  position: absolute; top: -10px; left: 50%; transform: translateX(-50%); z-index: 2;
+  min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; display: grid; place-items: center;
+  background: var(--accent); color: var(--on-accent); font: 800 13px/1 var(--font-body); box-shadow: 0 2px 6px rgba(0,0,0,.4);
+}
 
-/* ---------------- cards ---------------- */
 .card {
   --c: var(--wild);
   width: var(--cw); aspect-ratio: 5 / 7.4; border-radius: var(--radius); background: #fbfbf8; padding: calc(var(--cw) * .06);

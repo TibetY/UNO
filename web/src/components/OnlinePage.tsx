@@ -142,7 +142,7 @@ function OnlineGame({ session, onLeave }: { session: AnySession; onLeave: () => 
           <Table
             view={s.view}
             busy={s.sending || !s.connected}
-            onAction={(a) => session.act(a)}
+            onActions={(as) => session.actMany(as)}
             seatExtra={scoreChips}
             status={s.sending ? "Sending…" : undefined}
             gameOverActions={host

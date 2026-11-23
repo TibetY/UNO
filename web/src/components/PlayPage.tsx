@@ -15,7 +15,7 @@ export function PlayPage({ rules }: { rules: Rules }) {
   const [record, setRecord] = useState<[number, number]>([0, 0]);
   const [counted, setCounted] = useState(-1);
   const delay = useCallback((evs: readonly GameEvent[], g: Game) => 750 + dealAnimationMs(evs, g.rules.handSize), []);
-  const { game, start, act } = useLocalGame(delay);
+  const { game, start, actMany } = useLocalGame(delay);
   const { enter } = useImmersive();
 
   const newGame = () =>
@@ -44,7 +44,7 @@ export function PlayPage({ rules }: { rules: Rules }) {
   return (
     <section className="layout">
       <Stage>
-        <Table view={view} onAction={act}
+        <Table view={view} onActions={actMany}
           gameOverActions={<button className="btn primary" onClick={newGame}>New game</button>} />
       </Stage>
       <aside className="side">

@@ -1,13 +1,17 @@
-import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { COLORS, type CardId, type Color, cap, cardLabel, isWild, parseCard, rankName, sortHand } from "../engine/cards";
+import { type ReactNode, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { COLORS, type CardId, type Color, cap, cardLabel, isWild, matches, parseCard, rankName, sortHand } from "../engine/cards";
 import type { Action, GameEvent } from "../engine/engine";
 import type { TableView } from "../view";
 import { Card, CardBack } from "./Card";
-import { DEAL_STAGGER, DRAW_STAGGER } from "../anim";
+import {
+  DEAL_STAGGER, DRAW_STAGGER, EASE, FLIGHT_MS, MotionContext, PLAY_MS, PLAY_STAGGER, SHIFT_MS,
+  type TableMotion, flyFrom, reducedMotion,
+} from "../anim";
 
 interface Props {
   view: TableView;
-  onAction?: (a: Action) => void;
+  /** Called with one or more moves to make in order (e.g. several cards played at once). */
+  onActions?: (actions: Action[]) => void;
   /** Blocks input (e.g. waiting for the server to confirm a move). */
   busy?: boolean;
   /** Overrides the status line. */
@@ -24,12 +28,40 @@ export function playerName(v: TableView, p: number) {
   return v.you === p ? "You" : v.names[p];
 }
 
-export function Table({ view: v, onAction, busy, status, seatExtra, gameOverActions, hideGameOver }: Props) {
-  const [wildFor, setWildFor] = useState<CardId | null>(null);
+interface Keyed {
+  key: string;
+  card: CardId;
+}
+
+/** Stable keys for a sorted hand, so duplicates keep their identity. */
+function keyCards(sorted: readonly CardId[]): Keyed[] {
+  const seen = new Map<CardId, number>();
+  return sorted.map((card) => {
+    const n = (seen.get(card) ?? 0) + 1;
+    seen.set(card, n);
+    return { key: `${card}#${n}`, card };
+  });
+}
+
+/** Can `next` be played right after `prev` in the same go? */
+function canFollow(prev: CardId, next: CardId, multiPlay: boolean): boolean {
+  const p = parseCard(prev);
+  // Skip/Reverse give another turn: any card matching it can follow.
+  if (p.rank === "skip" || p.rank === "reverse") return matches(next, prev, p.color);
+  return multiPlay && parseCard(next).rank === p.rank;
+}
+
+export function Table({ view: v, onActions, busy, status, seatExtra, gameOverActions, hideGameOver }: Props) {
+  const [selected, setSelected] = useState<Keyed[]>([]);
+  const [wildChain, setWildChain] = useState<CardId[] | null>(null);
+  const deck = useRef<HTMLButtonElement>(null);
+  const departures = useRef<TableMotion["departures"]["current"]>([]);
+  const motion = useMemo<TableMotion>(() => ({ deck, departures }), []);
+
   const top = 1 - v.bottom;
   const yourTurn = v.legal.length > 0 && !busy;
-  const act = (a: Action) => {
-    if (!busy) onAction?.(a);
+  const send = (actions: Action[]) => {
+    if (!busy && actions.length) onActions?.(actions);
   };
   const legalByCard = useMemo(() => {
     const m = new Map<CardId, Action[]>();
@@ -38,18 +70,43 @@ export function Table({ view: v, onAction, busy, status, seatExtra, gameOverActi
   }, [v.legal]);
   const find = (type: Action["type"]) => v.legal.find((a) => a.type === type);
 
-  useEffect(() => setWildFor(null), [v.turn, v.phase]);
+  useEffect(() => {
+    setSelected([]);
+    setWildChain(null);
+  }, [v.turn, v.phase, v.gameId]);
 
-  const playCard = (card: CardId) => {
-    const options = legalByCard.get(card);
-    if (!options) return;
-    if (isWild(parseCard(card).rank)) setWildFor(card);
-    else act(options[0]);
+  const myHand = useMemo(() => keyCards(sortHand(v.hands[v.bottom] ?? [])), [v.hands, v.bottom]);
+  const last = selected[selected.length - 1];
+  const isSelected = (k: string) => selected.some((s) => s.key === k);
+  const followable = (k: Keyed) => !!last && !isSelected(k.key) && canFollow(last.card, k.card, v.rules.multiPlay);
+
+  const playChain = (cards: CardId[]) => {
+    if (cards.some((c) => isWild(parseCard(c).rank))) return setWildChain(cards);
+    send(cards.map((card) => ({ type: "play", card })));
+    setSelected([]);
   };
   const chooseColor = (color: Color) => {
-    const a = v.legal.find((x) => x.type === "play" && x.card === wildFor && x.color === color);
-    setWildFor(null);
-    if (a) act(a);
+    const chain = wildChain ?? [];
+    setWildChain(null);
+    setSelected([]);
+    send(chain.map((card) => (isWild(parseCard(card).rank) ? { type: "play", card, color } : { type: "play", card })));
+  };
+
+  const tapCard = (k: Keyed) => {
+    if (!yourTurn) return;
+    const i = selected.findIndex((s) => s.key === k.key);
+    if (i >= 0) return setSelected(selected.slice(0, i)); // tap a picked card to take it (and later ones) back
+    if (selected.length && followable(k)) return setSelected([...selected, k]);
+    if (!legalByCard.has(k.card)) return;
+    // Picking several cards starts only when another card of the same number or
+    // symbol could go with it. A lone Skip/Reverse plays at once: it's your turn
+    // again straight after, so you just tap the next card.
+    const rank = parseCard(k.card).rank;
+    const extraTurn = rank === "skip" || rank === "reverse";
+    const hasPartner = (v.rules.multiPlay || extraTurn) &&
+      myHand.some((o) => o.key !== k.key && parseCard(o.card).rank === rank);
+    if (hasPartner && v.phase !== "multi") setSelected([k]);
+    else playChain([k.card]);
   };
 
   const over = v.endReason !== null;
@@ -59,76 +116,112 @@ export function Table({ view: v, onAction, busy, status, seatExtra, gameOverActi
   const accept = find("accept");
   const challenge = find("challenge");
   const opp = v.you === null ? "" : v.names[1 - v.you];
+  const picking = selected.length > 0;
 
   let statusText = status;
   if (statusText === undefined) {
     if (over) statusText = "";
-    else if (yourTurn) {
+    else if (yourTurn && picking) {
+      statusText = selected.length === 1
+        ? `Tap more cards to play them too, in order. Then press Play.`
+        : `${selected.length} cards picked. Tap more, or press Play.`;
+    } else if (yourTurn) {
       if (v.phase === "drew") statusText = `You drew ${aOrAn(cardLabel(v.pending!))}. Play it or keep it.`;
       else if (v.phase === "respond") statusText = respondText(v, opp, legalByCard.size > 0, !!challenge);
       else if (v.phase === "multi") statusText = `Play another ${rankName(parseCard(v.top).rank)}, or end your turn.`;
+      else if (goesAgain(v)) statusText = legalByCard.size ? "You go again. Pick a card, or draw." : "You go again, but nothing matches. Draw a card.";
       else statusText = legalByCard.size ? "Your turn. Pick a card, or draw." : "No playable cards. Draw from the deck.";
     } else statusText = `${playerName(v, v.current)} ${v.you === null ? "to move" : "is thinking…"}`;
   }
 
   return (
-    <div className="table">
-      <Seat v={v} seat={top} position="top" extra={seatExtra?.[top]} />
+    <MotionContext.Provider value={motion}>
+      <div className="table">
+        <Seat v={v} seat={top} position="top" extra={seatExtra?.[top]} />
 
-      <div className="center">
-        <div className="pile-wrap">
-          <button
-            className={"deck" + (draw && !busy ? " can-draw" : "")}
-            disabled={!draw || busy}
-            onClick={() => draw && act(draw)}
-            aria-label={draw ? "Draw a card" : "Draw pile"}
-          >
-            <CardBack />
-          </button>
-          <span className="pile-label">{v.drawPile} in deck</span>
-        </div>
-        <div className="pile-wrap">
-          <DiscardPile v={v} />
-          <span className="pile-label">
-            {v.color ? `${cap(v.color)} to play` : "Any color"}
-            {v.pendingDraw > 0 && <span className="owed" title="Cards owed by the player to act"> · +{v.pendingDraw}</span>}
-          </span>
-        </div>
-      </div>
-
-      <div className="status" aria-live="polite">{statusText}</div>
-      <div className="actionbar">
-        {pass && <button className="btn" disabled={busy} onClick={() => act(pass)}>Keep it · end turn</button>}
-        {done && <button className="btn primary" disabled={busy} onClick={() => act(done)}>End turn</button>}
-        {challenge && <button className="btn" disabled={busy} onClick={() => act(challenge)}>Challenge</button>}
-        {accept && <button className="btn primary" disabled={busy} onClick={() => act(accept)}>Draw {v.pendingDraw}</button>}
-        {draw && <button className="btn" disabled={busy} onClick={() => act(draw)}>Draw a card</button>}
-      </div>
-
-      <Seat v={v} seat={v.bottom} position="bottom" extra={seatExtra?.[v.bottom]}
-        playable={yourTurn ? legalByCard : undefined} onPlay={playCard} />
-
-      {wildFor && (
-        <div className="overlay" onClick={() => setWildFor(null)}>
-          <div className="dialog" role="dialog" aria-label="Choose a color" onClick={(e) => e.stopPropagation()}>
-            <h2>Choose a color</h2>
-            <div className="swatches">
-              {COLORS.map((c) => (
-                <button key={c} className={`swatch c-${c}`} aria-label={cap(c)} onClick={() => chooseColor(c)} />
-              ))}
-            </div>
-            <button className="btn ghost" onClick={() => setWildFor(null)}>Cancel</button>
+        <div className="center">
+          <div className="pile-wrap">
+            <button
+              ref={deck}
+              className={"deck" + (draw && !busy && !picking ? " can-draw" : "")}
+              disabled={!draw || busy || picking}
+              onClick={() => draw && send([draw])}
+              aria-label={draw ? "Draw a card" : "Draw pile"}
+            >
+              <CardBack />
+            </button>
+            <span className="pile-label">{v.drawPile} in deck</span>
+          </div>
+          <div className="pile-wrap">
+            <DiscardPile v={v} />
+            <span className="pile-label">
+              {v.color ? `${cap(v.color)} to play` : "Any color"}
+              {v.pendingDraw > 0 && <span className="owed" title="Cards owed by the player to act"> · +{v.pendingDraw}</span>}
+            </span>
           </div>
         </div>
-      )}
 
-      {over && !hideGameOver && <GameOver v={v} actions={gameOverActions} />}
-    </div>
+        <div className="status" aria-live="polite">{statusText}</div>
+        <div className="actionbar">
+          {picking ? (
+            <>
+              <button className="btn primary" disabled={busy} onClick={() => playChain(selected.map((s) => s.card))}>
+                Play {selected.length === 1 ? "card" : `${selected.length} cards`}
+              </button>
+              <button className="btn" onClick={() => setSelected([])}>Cancel</button>
+            </>
+          ) : (
+            <>
+              {pass && <button className="btn" disabled={busy} onClick={() => send([pass])}>Keep it · end turn</button>}
+              {done && <button className="btn primary" disabled={busy} onClick={() => send([done])}>End turn</button>}
+              {challenge && <button className="btn" disabled={busy} onClick={() => send([challenge])}>Challenge</button>}
+              {accept && <button className="btn primary" disabled={busy} onClick={() => send([accept])}>Draw {v.pendingDraw}</button>}
+              {draw && <button className="btn" disabled={busy} onClick={() => send([draw])}>Draw a card</button>}
+            </>
+          )}
+        </div>
+
+        <Seat v={v} seat={v.bottom} position="bottom" extra={seatExtra?.[v.bottom]}
+          cardState={yourTurn ? (k) => {
+            const order = selected.findIndex((s) => s.key === k.key);
+            if (order >= 0) return { selected: true, order: order + 1 };
+            if (picking) return followable(k) ? { playable: true } : { dim: true };
+            return legalByCard.has(k.card) ? { playable: true } : { dim: true };
+          } : undefined}
+          onTap={tapCard} />
+
+        {wildChain && (
+          <div className="overlay" onClick={() => setWildChain(null)}>
+            <div className="dialog" role="dialog" aria-label="Choose a color" onClick={(e) => e.stopPropagation()}>
+              <h2>Choose a color</h2>
+              <div className="swatches">
+                {COLORS.map((c) => (
+                  <button key={c} className={`swatch c-${c}`} aria-label={cap(c)} onClick={() => chooseColor(c)} />
+                ))}
+              </div>
+              <button className="btn ghost" onClick={() => setWildChain(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {over && !hideGameOver && <GameOver v={v} actions={gameOverActions} />}
+      </div>
+    </MotionContext.Provider>
   );
 }
 
 function aOrAn(label: string) {
   return (/^[AEIOU]/.test(label) ? "an " : "a ") + label;
+}
+
+/** The player to act just played a Skip or Reverse, so this is their extra turn. */
+function goesAgain(v: TableView): boolean {
+  for (let i = v.events.length - 1; i >= 0; i--) {
+    const e = v.events[i];
+    if (e.event === "play") return e.player === v.current && /:(skip|reverse)$/.test(e.card ?? "");
+    if (e.event !== "game_over") return false;
+  }
+  return false;
 }
 
 function respondText(v: TableView, opp: string, canStack: boolean, canChallenge: boolean): string {
@@ -151,9 +244,16 @@ function prevColor(events: GameEvent[]): string | null {
   return null;
 }
 
-function Seat({ v, seat, position, extra, playable, onPlay }: {
+interface CardState {
+  playable?: boolean;
+  dim?: boolean;
+  selected?: boolean;
+  order?: number;
+}
+
+function Seat({ v, seat, position, extra, cardState, onTap }: {
   v: TableView; seat: number; position: "top" | "bottom"; extra?: ReactNode;
-  playable?: Map<CardId, Action[]>; onPlay?: (c: CardId) => void;
+  cardState?: (k: Keyed) => CardState; onTap?: (k: Keyed) => void;
 }) {
   const active = v.endReason === null && v.current === seat;
   const info = (
@@ -167,94 +267,126 @@ function Seat({ v, seat, position, extra, playable, onPlay }: {
   return (
     <div className={`seat seat-${position}${active ? " active" : ""}`}>
       {position === "top" && info}
-      <Hand v={v} seat={seat} small={position === "top"} playable={playable} onPlay={onPlay} />
+      <Hand v={v} seat={seat} small={position === "top"} cardState={cardState} onTap={onTap} />
       {position === "bottom" && info}
     </div>
   );
 }
 
-function Hand({ v, seat, small, playable, onPlay }: {
+/**
+ * A hand of cards. Each card sits in a "slot" the motion code moves: when the
+ * layout changes, slots glide from where they were to where they now are, new
+ * cards fly in from the deck one after another, and cards that leave are noted
+ * so the discard pile can fly them in from here.
+ */
+function Hand({ v, seat, small, cardState, onTap }: {
   v: TableView; seat: number; small: boolean;
-  playable?: Map<CardId, Action[]>; onPlay?: (c: CardId) => void;
+  cardState?: (k: Keyed) => CardState; onTap?: (k: Keyed) => void;
 }) {
+  const motion = useContext(MotionContext)!;
   const ref = useRef<HTMLDivElement>(null);
   const hand = v.hands[seat];
   const n = v.handSizes[seat];
-  const sorted = useMemo(() => (hand ? sortHand(hand) : null), [hand?.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
-  const handKey = sorted ? sorted.join(",") : `#${n}`;
-  const [overlap, setOverlap] = useState(6);
+  const handKey = hand ? sortHand(hand).join(",") : `#${n}`;
+  const items = useMemo<Keyed[]>(
+    () => (hand ? keyCards(sortHand(hand)) : Array.from({ length: n }, (_, i) => ({ key: `back#${i}`, card: "" }))),
+    [handKey], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
+  // Overlap so the hand always fits on one row. Measured on resize only, so a
+  // card arriving doesn't cause a second layout pass.
+  const [box, setBox] = useState({ width: 0, card: 0 });
   useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const fit = () => {
-      const first = el.querySelector(".card") as HTMLElement | null;
-      const cw = first ? first.offsetWidth : 80;
-      const avail = el.clientWidth - 24;
-      let o = 6;
-      if (n > 1 && n * cw + (n - 1) * 6 > avail) o = Math.max((avail - cw) / (n - 1) - cw, -cw * 0.84);
-      setOverlap(o);
+    const el = ref.current!;
+    const measure = () => {
+      const cw = parseFloat(getComputedStyle(el).getPropertyValue("--cw")) * (small ? 0.78 : 1);
+      setBox((b) => (b.width === el.clientWidth && b.card === cw ? b : { width: el.clientWidth, card: cw }));
     };
-    fit();
-    const ro = new ResizeObserver(fit);
+    measure();
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [n]);
+  }, [small]);
+  let overlap = 6;
+  const avail = box.width - 24;
+  if (box.card && n > 1 && n * box.card + (n - 1) * 6 > avail) {
+    overlap = Math.max((avail - box.card) / (n - 1) - box.card, -box.card * 0.84);
+  }
 
-  // Which cards just arrived, and when each should start flying in. A new game
-  // deals the whole hand quickly; later draws (penalties, the deck) arrive slower.
-  const prev = useRef<{ game: string; cards: CardId[] | null; count: number } | null>(null);
-  const delays = useMemo(() => {
-    const out = new Map<number, number>();
-    const p = prev.current;
-    const newGame = !p || p.game !== v.gameId;
-    // Top seat's cards are offset half a step so the two hands are dealt alternately.
-    const offset = small ? DEAL_STAGGER / 2 : 0;
-    if (newGame) {
-      for (let i = 0; i < n; i++) out.set(i, i * DEAL_STAGGER + offset);
-      return out;
-    }
-    let k = 0;
-    if (sorted && p.cards) {
-      const counts = new Map<CardId, number>();
-      for (const c of p.cards) counts.set(c, (counts.get(c) ?? 0) + 1);
-      sorted.forEach((c, i) => {
-        const left = counts.get(c) ?? 0;
-        if (left > 0) counts.set(c, left - 1);
-        else out.set(i, k++ * DRAW_STAGGER);
-      });
-    } else if (!sorted) {
-      for (let i = p.count; i < n; i++) out.set(i, k++ * DRAW_STAGGER);
-    }
-    return out;
-  }, [handKey, v.gameId]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    prev.current = { game: v.gameId, cards: sorted, count: n };
-  }, [handKey, v.gameId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const slots = useRef(new Map<string, HTMLDivElement>());
+  const prev = useRef<{ game: string; pos: Map<string, { x: number; y: number }>; rects: Map<string, DOMRect>; cards: Map<string, CardId> } | null>(null);
 
-  const freshStyle = (i: number) => {
-    const d = delays.get(i);
-    return d === undefined ? undefined : ({ "--deal-delay": `${d}ms` } as React.CSSProperties);
-  };
+  useLayoutEffect(() => {
+    const host = ref.current!;
+    const reduce = reducedMotion();
+    const before = prev.current;
+    const newGame = !before || before.game !== v.gameId;
+    const hostRect = host.getBoundingClientRect();
+    const pos = new Map<string, { x: number; y: number }>();
+    const rects = new Map<string, DOMRect>();
+    const cards = new Map<string, CardId>();
+
+    // Cards that left this hand: remember where they were for the pile.
+    if (before && !newGame) {
+      for (const [k, r] of before.rects) {
+        if (!slots.current.has(k)) motion.departures.current.push({ seat, card: before.cards.get(k) || null, rect: r, at: performance.now() });
+      }
+      motion.departures.current = motion.departures.current.filter((d) => performance.now() - d.at < 3000);
+    }
+
+    const deckRect = motion.deck.current?.getBoundingClientRect();
+    let arriving = 0;
+    items.forEach((it, i) => {
+      const el = slots.current.get(it.key);
+      if (!el) return;
+      // Layout position, unaffected by any transform in flight.
+      const p = { x: el.offsetLeft, y: el.offsetTop };
+      pos.set(it.key, p);
+      cards.set(it.key, it.card);
+      rects.set(it.key, new DOMRect(hostRect.left + p.x, hostRect.top + p.y, el.offsetWidth, el.offsetHeight));
+      if (reduce) return;
+      const old = newGame ? undefined : before!.pos.get(it.key);
+      if (old) {
+        if (Math.abs(old.x - p.x) < 0.5 && Math.abs(old.y - p.y) < 0.5) return;
+        // Moved: glide from where it is on screen right now.
+        const visual = el.getBoundingClientRect();
+        el.getAnimations().forEach((a) => a.cancel());
+        const dx = visual.left - (hostRect.left + p.x);
+        const dy = visual.top - (hostRect.top + p.y);
+        el.animate(
+          [{ transform: `translate(${dx}px, ${dy}px) scale(${visual.width / el.offsetWidth || 1})` }, { transform: "none" }],
+          { duration: SHIFT_MS, easing: EASE },
+        );
+      } else if (deckRect) {
+        // New card: fly in from the deck.
+        const delay = newGame ? i * DEAL_STAGGER + (small ? DEAL_STAGGER / 2 : 0) : arriving++ * DRAW_STAGGER;
+        el.getAnimations().forEach((a) => a.cancel());
+        flyFrom(el, deckRect, { duration: FLIGHT_MS, delay, rotate: small ? 8 : -10 });
+      }
+    });
+    prev.current = { game: v.gameId, pos, rects, cards };
+  });
 
   const style = { "--overlap": `${overlap}px` } as React.CSSProperties;
   let pendingMarked = false;
-  const seen = new Map<CardId, number>();
   return (
     <div ref={ref} className={`hand ${small ? "hand-small" : "hand-main"}`} style={style}>
-      {sorted
-        ? sorted.map((c, i) => {
-            const nth = (seen.get(c) ?? 0) + 1;
-            seen.set(c, nth);
-            const canPlay = !!playable?.has(c);
-            const isPending = !pendingMarked && v.phase === "drew" && v.current === seat && c === v.pending;
-            if (isPending) pendingMarked = true;
-            return (
-              <Card key={`${c}#${nth}`} id={c} fresh={delays.has(i)} style={freshStyle(i)} highlight={isPending}
-                playable={canPlay} dim={!!playable && !canPlay} onClick={() => onPlay?.(c)} />
-            );
-          })
-        : Array.from({ length: n }, (_, i) => <CardBack key={i} className={delays.has(i) ? "fresh" : ""} style={freshStyle(i)} />)}
+      {items.map((it) => {
+        const setRef = (el: HTMLDivElement | null) => {
+          if (el) slots.current.set(it.key, el);
+          else slots.current.delete(it.key);
+        };
+        if (!hand) return <div className="slot" key={it.key} ref={setRef}><CardBack /></div>;
+        const st = cardState?.(it) ?? {};
+        const isPending = !pendingMarked && v.phase === "drew" && v.current === seat && it.card === v.pending;
+        if (isPending) pendingMarked = true;
+        return (
+          <div className="slot" key={it.key} ref={setRef}>
+            <Card id={it.card} highlight={isPending} playable={st.playable} dim={st.dim} selected={st.selected} order={st.order}
+              onClick={st.playable || st.selected ? () => onTap?.(it) : undefined} />
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -265,25 +397,69 @@ function hash(s: string) {
   return Math.abs(h);
 }
 
+/** The discard pile: the last few cards, fanned. New cards fly in from the hand that played them. */
 function DiscardPile({ v }: { v: TableView }) {
-  const played = v.events.filter((e) => (e.event === "play" || e.event === "start_card") && e.card);
-  const recent = played.slice(-4);
-  if (!recent.length || recent[recent.length - 1].card !== v.top) recent.push({ t: v.turn, event: "play", player: null, card: v.top });
-  const shown = recent.slice(-4);
+  const motion = useContext(MotionContext)!;
+  const played = v.events
+    .map((e, i) => ({ e, i }))
+    .filter(({ e }) => (e.event === "play" || e.event === "start_card") && e.card);
+  if (!played.length || played[played.length - 1].e.card !== v.top) {
+    played.push({ e: { t: v.turn, event: "play", player: null, card: v.top }, i: -1 });
+  }
+  const shown = played.slice(-4);
+  const els = useRef(new Map<string, HTMLDivElement>());
+  const seen = useRef<{ game: string; keys: Set<string> } | null>(null);
+
+  useLayoutEffect(() => {
+    const before = seen.current;
+    const newGame = !before || before.game !== v.gameId;
+    const fresh = shown.filter(({ e, i }) => !before?.keys.has(`${i}:${e.card}`) && !newGame);
+    seen.current = { game: v.gameId, keys: new Set(shown.map(({ e, i }) => `${i}:${e.card}`)) };
+    if (reducedMotion()) return;
+    if (newGame) {
+      // The starting card flips over from the deck.
+      const { e, i } = shown[shown.length - 1];
+      const el = els.current.get(`${i}:${e.card}`);
+      const deck = motion.deck.current?.getBoundingClientRect();
+      if (el && deck) flyFrom(el, deck, { duration: PLAY_MS, rotate: -rotation(e, i) });
+      return;
+    }
+    if (!fresh.length) return;
+    // Hide the new cards at once; fly them in once every hand has noted its departures.
+    for (const { e, i } of fresh) els.current.get(`${i}:${e.card}`)?.animate([{ opacity: 0 }, { opacity: 0 }], { duration: 1 });
+    queueMicrotask(() => {
+      fresh.forEach(({ e, i }, n) => {
+        const el = els.current.get(`${i}:${e.card}`);
+        if (!el) return;
+        const deps = motion.departures.current;
+        const j = deps.findIndex((d) => d.seat === e.player && (d.card === e.card || d.card === null));
+        const from = j >= 0 ? deps.splice(j, 1)[0].rect : motion.deck.current?.getBoundingClientRect();
+        if (!from) return;
+        el.getAnimations().forEach((a) => a.cancel());
+        flyFrom(el, from, { duration: PLAY_MS, delay: n * PLAY_STAGGER, rotate: -rotation(e, i) });
+      });
+    });
+  });
+
   return (
     <div className="discard" style={{ "--ring": v.color ? `var(--${v.color})` : "var(--ring-any)" } as React.CSSProperties}>
-      {shown.map((e, i) => {
-        const isTop = i === shown.length - 1;
-        const rot = (hash(`${e.t}${e.card}${i}`) % 25) - 12;
+      {shown.map(({ e, i }, n) => {
+        const isTop = n === shown.length - 1;
+        const key = `${i}:${e.card}`;
         return (
-          <Card key={`${e.t}-${e.card}-${played.length - shown.length + i}`} id={e.card!}
-            className={isTop ? "top" : ""}
-            chosen={isTop && parseCard(e.card!).color === null ? v.color : null}
-            style={{ transform: `rotate(${rot}deg)`, "--rot": `${rot}deg` } as React.CSSProperties} />
+          <div className="pile-slot" key={key} ref={(el) => { if (el) els.current.set(key, el); else els.current.delete(key); }}>
+            <Card id={e.card!}
+              chosen={isTop && parseCard(e.card!).color === null ? v.color : null}
+              style={{ transform: `rotate(${rotation(e, i)}deg)` }} />
+          </div>
         );
       })}
     </div>
   );
+}
+
+function rotation(e: GameEvent, i: number) {
+  return (hash(`${e.t}${e.card}${i}`) % 25) - 12;
 }
 
 function GameOver({ v, actions }: { v: TableView; actions?: ReactNode }) {
@@ -320,7 +496,7 @@ export function describeEvent(e: GameEvent, v: TableView): string | null {
     case "draw": return `${who} drew ${e.count} card${e.count === 1 ? "" : "s"}`;
     case "pass": return `${who} kept the card`;
     case "challenge": return `${who} challenged: ${e.success ? "caught a bluff!" : "it was legal"}`;
-    case "accept": return `${who} accepted the Wild Draw Four`;
+    case "accept": return `${who} accepted the penalty`;
     case "reshuffle": return `Discard pile reshuffled into the deck`;
     case "game_over": return e.player === null ? "Game drawn at the turn limit" : `${who} won`;
     default: return null;
@@ -346,4 +522,3 @@ export function GameLog({ v }: { v: TableView }) {
     </ol>
   );
 }
-

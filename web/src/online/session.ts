@@ -6,8 +6,8 @@
  *   host:  { app, role: "host",  name, v, g, st, sc }   v = state version,
  *          g = seated guest's peer label, st = the guest's view of the table,
  *          sc = match score [host, guest]
- *   guest: { app, role: "guest", name, act }            act = { seq, v, i }:
- *          "take legal action #i of state version v"
+ *   guest: { app, role: "guest", name, act }            act = { seq, v, keys }:
+ *          "make these moves, in order, on state version v" (action keys)
  * Presence is absolute state, handed to late joiners and re-asserted after
  * reconnects, so nothing needs re-sending when messages drop. Everything a peer
  * sends is untrusted: the host validates every move against the rules, and the
@@ -133,25 +133,20 @@ export class HostSession extends Session {
 
   private handleAct(act: unknown) {
     if (!act || typeof act !== "object") return;
-    const { seq, v, i } = act as Record<string, unknown>;
-    if (typeof seq !== "number" || typeof v !== "number" || typeof i !== "number") return;
+    const { seq, v, keys } = act as Record<string, unknown>;
+    if (typeof seq !== "number" || typeof v !== "number" || !Array.isArray(keys) || keys.length > 40) return;
     if (seq <= this.lastSeq) return;
     this.lastSeq = seq;
     const g = this.game;
     if (!g || v !== this.ver || g.isOver || g.current !== 1) return;
-    const legal = g.legalActions();
-    if (!Number.isInteger(i) || i < 0 || i >= legal.length) return;
-    g.step(legal[i]);
-    this.changed();
+    if (applyMoves(g, 1, keys.filter((k): k is string => typeof k === "string"))) this.changed();
   }
 
-  /** The host's own move (seat 0). */
-  act(action: Action) {
+  /** The host's own moves (seat 0). */
+  actMany(actions: Action[]) {
     const g = this.game;
     if (!g || g.isOver || g.current !== 0) return;
-    if (!g.legalActions().some((a) => actionKey(a) === actionKey(action))) return;
-    g.step(action);
-    this.changed();
+    if (applyMoves(g, 0, actions.map(actionKey))) this.changed();
   }
 
   newGame() {
@@ -204,7 +199,7 @@ function validView(w: unknown): w is WireView {
     typeof v.top === "string" && CARD_RE.test(v.top) &&
     (v.pending === null || (typeof v.pending === "string" && CARD_RE.test(v.pending))) &&
     Array.isArray(v.legal) && v.legal.every((a) => typeof a === "string") &&
-    Array.isArray(v.events) && Array.isArray(v.handSizes) && typeof v.pendingDraw === "number" && typeof v.gameId === "string" && v.gameId.length < 40 && v.you === 1
+    Array.isArray(v.events) && Array.isArray(v.handSizes) && typeof v.pendingDraw === "number" && !!v.rules && typeof v.rules === "object" && typeof v.gameId === "string" && v.gameId.length < 40 && v.you === 1
   );
 }
 
@@ -248,14 +243,13 @@ export class GuestSession extends Session {
     });
   }
 
-  act(action: Action) {
+  actMany(actions: Action[]) {
     const v = this.state.view;
-    if (!v || this.sentFor === this.hostVer) return;
-    const i = v.legal.findIndex((a) => actionKey(a) === actionKey(action));
-    if (i < 0) return;
+    if (!v || this.sentFor === this.hostVer || !actions.length) return;
+    if (!v.legal.some((a) => actionKey(a) === actionKey(actions[0]))) return;
     this.sentFor = this.hostVer;
     this.set({ sending: true });
-    void this.room.presence({ act: { seq: Date.now(), v: this.hostVer, i } }).catch(() => {
+    void this.room.presence({ act: { seq: Date.now(), v: this.hostVer, keys: actions.map(actionKey) } }).catch(() => {
       this.sentFor = -1;
       this.set({ sending: false });
     });
@@ -263,3 +257,21 @@ export class GuestSession extends Session {
 }
 
 export type AnySession = HostSession | GuestSession;
+
+/**
+ * Apply `seat`'s moves in order, each checked against the rules; stop at the
+ * first one that isn't legal. If the cards picked leave the engine waiting
+ * for more of the same rank, end the turn. Returns whether anything changed.
+ */
+function applyMoves(g: Game, seat: number, keys: string[]): boolean {
+  let changed = false;
+  for (const key of keys) {
+    if (g.isOver || g.current !== seat) break;
+    const a = g.legalActions().find((x) => actionKey(x) === key);
+    if (!a) break;
+    g.step(a);
+    changed = true;
+  }
+  if (changed && !g.isOver && g.current === seat && g.phase === "multi") g.step({ type: "done" });
+  return changed;
+}
