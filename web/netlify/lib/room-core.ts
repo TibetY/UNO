@@ -21,8 +21,11 @@ export interface StoredPeer {
 const ROOM_RE = /^[a-z0-9][a-z0-9_.-]{0,47}$/;
 const PEER_RE = /^[a-z0-9]{6,24}$/;
 const MAX_PRESENCE = 8 * 1024;
-/** A peer that hasn't checked in for this long has left. */
-export const PEER_TTL_MS = 15_000;
+/**
+ * A peer that hasn't checked in for this long has left. Generous, because
+ * phones pause pages in the background (switching apps to send the code).
+ */
+export const PEER_TTL_MS = 45_000;
 /** Forget peers entirely after this long. */
 const PURGE_MS = 10 * 60_000;
 

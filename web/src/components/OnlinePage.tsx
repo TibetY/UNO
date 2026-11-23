@@ -92,6 +92,14 @@ export function OnlinePage({ provider, rules, initialCode }: Props) {
   );
 }
 
+/** Both players have to be on the same site: games don't cross between hosts. */
+function siteHint(transport: "online" | "local"): string {
+  if (transport === "local") return "This copy can only link tabs in this browser.";
+  const host = location.hostname;
+  if (/claude\.ai$|claudeusercontent|anthropic/.test(host) || !host) return "You both need to be on this same claude.ai page.";
+  return `You both need to be on ${host}.`;
+}
+
 function setHash(h: string) {
   try {
     history.replaceState(null, "", `#${h}`);
@@ -130,7 +138,7 @@ function OnlineGame({ session, onLeave }: { session: AnySession; onLeave: () => 
     : undefined;
 
   let banner: string | null = null;
-  if (!s.connected) banner = "Reconnecting…";
+  if (!s.connected) banner = s.wasConnected ? "Reconnecting…" : "Connecting…";
   else if (s.status === "opponent-left") banner = host ? `${s.oppName} left. The game resumes if they rejoin with the code.` : `${s.oppName} left. Waiting for them to come back…`;
   else if (s.status === "full") banner = `This game already has two players.`;
 
@@ -158,6 +166,7 @@ function OnlineGame({ session, onLeave }: { session: AnySession; onLeave: () => 
                   <button className="code" id="code-text" onClick={copy} title="Copy code">{s.code}</button>
                   <p className="help">{copied ? "Copied." : "Tap the code to copy it."} Send it to your friend. They choose <b>Online</b>, then <b>Join</b>.</p>
                   <p className="pulse">Waiting for an opponent…</p>
+                  <p className="help">Keep this screen open and on: your device runs the game. {siteHint(s.transport)}</p>
                 </>
               ) : s.status === "full" ? (
                 <p>Someone else already took the seat in game <b>{s.code}</b>.</p>
@@ -165,7 +174,7 @@ function OnlineGame({ session, onLeave }: { session: AnySession; onLeave: () => 
                 <>
                   <p className="eyebrow">Game {s.code}</p>
                   <p className="pulse">{s.status === "opponent-left" ? "The host left the game." : "Looking for the host…"}</p>
-                  <p className="help">Make sure the code is right and the host still has the game open.</p>
+                  <p className="help">Check the code, and that the host still has the game open with the screen on. {siteHint(s.transport)}</p>
                 </>
               )}
             </div>
@@ -180,7 +189,7 @@ function OnlineGame({ session, onLeave }: { session: AnySession; onLeave: () => 
             <div><dt>You</dt><dd>{s.myName} ({host ? "host" : "guest"})</dd></div>
             <div><dt>Opponent</dt><dd>{s.status === "waiting" ? "Not here yet" : s.oppName}</dd></div>
             <div><dt>Match</dt><dd className="num">{s.score[0]} – {s.score[1]}</dd></div>
-            <div><dt>Connection</dt><dd><span className={"dot " + (s.connected ? "ok" : "bad")} />{s.connected ? (s.transport === "local" ? "This browser only" : "Online") : "Reconnecting"}</dd></div>
+            <div><dt>Connection</dt><dd><span className={"dot " + (s.connected ? "ok" : "bad")} />{s.connected ? (s.transport === "local" ? "This browser only" : "Online") : s.wasConnected ? "Reconnecting" : "Connecting"}</dd></div>
           </dl>
           <button className="btn wide" onClick={onLeave}>Leave game</button>
         </div>

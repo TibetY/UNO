@@ -19,12 +19,12 @@ npm run build            # static site in web/dist/, deployable to any static ho
 npm run build:artifact   # single self-contained page: web/dist-artifact/card-duel.html
 ```
 
-The app has four tabs:
+The app has two tabs:
 
-- **Play a bot**: play against `random`, `greedy` or `heuristic`.
-- **Online**: play a friend in real time. One player creates a game and shares the 5-character code, and the other joins with it.
-- **Watch bots**: two bots play with both hands face up. You can pause, step one move at a time and change the speed.
-- **Simulate**: run up to 100,000 games in the browser. Results include win rates with confidence intervals, a histogram of game length and card-usage tables.
+- **Play**: play against `random`, `greedy` or `heuristic`, or against a friend on the same device.
+- **Online**: play a friend in real time. One player creates a game and shares the 5-character code, and the other joins with it. Both players need to be on the same site.
+
+Bot-vs-bot matches and statistics are on the command line (`python -m cardduel simulate`, `tournament`).
 
 **On phones**, starting a game (New game, Create game, Join) switches to a
 full-screen table that can't scroll or zoom. **☰ Menu** goes back to the

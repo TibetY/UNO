@@ -341,41 +341,9 @@ html.immersive body { position: fixed; inset: 0; width: 100%; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 .dot.ok { background: var(--ok); } .dot.bad { background: var(--danger); }
 
-/* ---------------- simulate ---------------- */
-.sim { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 20px; align-items: start; }
-.sim-results { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.progress { height: 10px; background: var(--panel-2); border-radius: 999px; overflow: hidden; margin-bottom: 10px; }
-.progress div { height: 100%; background: var(--accent); transition: width .1s; }
-.empty { border: 1px dashed var(--line); border-radius: 14px; padding: 40px; text-align: center; color: var(--muted); line-height: 1.5; }
-.versus { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; gap: 12px; }
-.versus .right { text-align: right; }
-.versus .pct { font-family: var(--font-display); font-size: 38px; font-weight: 800; font-variant-numeric: tabular-nums; display: block; }
-.versus .who { font-size: 13px; color: var(--muted); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
-.key { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
-.key.p0, .winbar .p0 { background: var(--blue); }
-.key.p1, .winbar .p1 { background: var(--red); }
-.winbar { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: #333; }
-.winbar div { transition: width .5s; }
-.winbar .dr { background: #666; }
-.ci { font-size: 12px; color: var(--muted); margin-top: 8px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
-.tile .k { font-size: 12px; color: var(--muted); }
-.tile .v { font-size: 22px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
-.tile .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.hist { display: flex; align-items: flex-end; gap: 2px; height: 140px; padding-top: 6px; }
-.hist div { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 1px; opacity: .85; }
-.hist div:hover { opacity: 1; }
-.hist-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 6px; }
-.table-scroll { overflow-x: auto; }
-table.ranks { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
-table.ranks th, table.ranks td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--line); }
-table.ranks th:first-child, table.ranks td:first-child { text-align: left; }
-table.ranks th { color: var(--muted); font-weight: 600; }
-
 /* ---------------- responsive ---------------- */
 @media (max-width: 980px) {
-  .layout, .sim { grid-template-columns: 1fr; }
+  .layout { grid-template-columns: 1fr; }
   .log { max-height: 220px; }
 }
 @media (max-width: 600px) {

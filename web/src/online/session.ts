@@ -31,6 +31,8 @@ export interface OnlineState {
   code: string;
   status: OnlineStatus;
   connected: boolean;
+  /** Has been connected at least once (so a drop is a reconnect, not the first connect). */
+  wasConnected: boolean;
   view: TableView | null;
   myName: string;
   oppName: string;
@@ -57,6 +59,39 @@ export function makeCode(): string {
 export const roomName = (code: string) => `duel-${code}`;
 export const validCode = (code: string) => /^[a-z0-9]{3,12}$/.test(code);
 
+/**
+ * Keeps the screen on during an online game where the browser allows it: a
+ * phone that locks or sleeps stops checking in, and the host's phone is also
+ * the referee. Re-acquired when the page comes back into view.
+ */
+const keepAwake = (() => {
+  type Lock = { release(): Promise<void> };
+  let lock: Lock | null = null;
+  let wanted = false;
+  const acquire = async () => {
+    wanted = true;
+    const wl = (navigator as Navigator & { wakeLock?: { request(t: "screen"): Promise<Lock> } }).wakeLock;
+    if (!wl || lock || document.visibilityState !== "visible") return;
+    try {
+      lock = await wl.request("screen");
+      (lock as unknown as EventTarget).addEventListener?.("release", () => (lock = null));
+    } catch {
+      /* not allowed here (low battery, embedded view, older browser) */
+    }
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (wanted && document.visibilityState === "visible") void acquire();
+  });
+  return {
+    acquire,
+    release() {
+      wanted = false;
+      void lock?.release().catch(() => {});
+      lock = null;
+    },
+  };
+})();
+
 abstract class Session {
   protected listeners = new Set<() => void>();
   protected state: OnlineState;
@@ -64,14 +99,15 @@ abstract class Session {
 
   constructor(protected room: SharedRoom, role: "host" | "guest", code: string, name: string) {
     this.state = {
-      role, code, status: "connecting", connected: false, view: null,
+      role, code, status: "connecting", connected: false, wasConnected: false, view: null,
       myName: name, oppName: "Opponent", score: [0, 0], sending: false, transport: room.kind,
     };
   }
 
   protected start() {
     this.unsubs.push(this.room.onPeers((p) => this.onPeers(p)));
-    this.unsubs.push(this.room.onConnection((c) => this.set({ connected: c })));
+    this.unsubs.push(this.room.onConnection((c) => this.set({ connected: c, wasConnected: this.state.wasConnected || c })));
+    void keepAwake.acquire();
   }
 
   protected abstract onPeers(peers: readonly Peer[]): void;
@@ -87,6 +123,7 @@ abstract class Session {
   }
 
   async leave() {
+    keepAwake.release();
     this.unsubs.forEach((u) => u());
     this.listeners.clear();
     await this.room.leave().catch(() => {});

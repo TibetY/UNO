@@ -3,18 +3,14 @@ import { HOUSE_RULES, OG_RULES, type Rules } from "./engine/engine";
 import { Card, CustomCardContext, customEffect } from "./components/Card";
 import { OnlinePage } from "./components/OnlinePage";
 import { PlayPage } from "./components/PlayPage";
-import { SimPage } from "./components/SimPage";
-import { WatchPage } from "./components/WatchPage";
 import { type RoomProvider, artifactRoomProvider, localRoomProvider } from "./online/transport";
 import { pollRoomProvider } from "./online/poll";
 import { load, save } from "./storage";
 
-type View = "play" | "online" | "watch" | "sim";
+type View = "play" | "online";
 const TABS: { id: View; label: string }[] = [
-  { id: "play", label: "Play a bot" },
+  { id: "play", label: "Play" },
   { id: "online", label: "Online" },
-  { id: "watch", label: "Watch bots" },
-  { id: "sim", label: "Simulate" },
 ];
 
 function readHash(): { view: View; code: string } {
@@ -77,8 +73,6 @@ export function App() {
       <main>
         <div id="page-play" hidden={view !== "play"}><PlayPage rules={rules} /></div>
         <div id="page-online" hidden={view !== "online"}><OnlinePage provider={provider} rules={rules} initialCode={code} /></div>
-        <div id="page-watch" hidden={view !== "watch"}><WatchPage rules={rules} active={view === "watch"} /></div>
-        <div id="page-sim" hidden={view !== "sim"}><SimPage rules={rules} /></div>
         <RulesPanel rules={rules} onChange={updateRules} onReplace={(r) => { setRules(r); save("rules", r); }} />
       </main>
     </>
