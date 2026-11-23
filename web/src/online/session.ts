@@ -14,6 +14,7 @@
  * host never publishes its own hand until the game is over.
  */
 import { type Action, Game, type Rules, actionKey } from "../engine/engine";
+import { parseCard } from "../engine/cards";
 import { randomSeed } from "../engine/rng";
 import { type TableView, type WireView, decodeView, encodeView, viewFromGame } from "../view";
 import type { Peer, SharedRoom } from "./transport";
@@ -245,6 +246,9 @@ export class GuestSession extends Session {
   private hostVer = -1;
   private sentFor = -1;
   private sawHost = false;
+  /** The table as it will look once the host confirms our move (shown meanwhile). */
+  private predicted: TableView | null = null;
+  private sendTimer: number | undefined;
 
   constructor(room: SharedRoom, code: string, name: string) {
     super(room, "guest", code, name);
@@ -269,6 +273,7 @@ export class GuestSession extends Session {
     if (seat && seat !== me) return this.set({ status: "full", oppName });
     if (typeof pr.v === "number") this.hostVer = pr.v;
     const view = validView(pr.st) ? decodeView(pr.st) : null;
+    if (view && typeof view.eventBase !== "number") view.eventBase = 0;
     if (view) {
       view.names = [oppName, this.state.myName];
       const r = view.rules as Partial<TableView["rules"]>;
@@ -279,13 +284,21 @@ export class GuestSession extends Session {
       };
     }
     const sc = Array.isArray(pr.sc) && pr.sc.length === 2 ? (pr.sc as number[]).map((x) => Number(x) || 0) : [0, 0];
+    const waiting = this.sentFor === this.hostVer;
+    if (!waiting) this.settle();
     this.set({
       status: view ? "playing" : "looking",
       oppName,
-      view,
+      // While our move is on its way, keep showing it rather than the old table.
+      view: waiting && this.predicted ? this.predicted : view,
       score: [sc[1], sc[0]],
-      sending: this.sentFor === this.hostVer,
+      sending: waiting,
     });
+  }
+
+  private settle() {
+    this.predicted = null;
+    window.clearTimeout(this.sendTimer);
   }
 
   actMany(actions: Action[]) {
@@ -293,15 +306,56 @@ export class GuestSession extends Session {
     if (!v || this.sentFor === this.hostVer || !actions.length) return;
     if (!v.legal.some((a) => actionKey(a) === actionKey(actions[0]))) return;
     this.sentFor = this.hostVer;
-    this.set({ sending: true });
-    void this.room.presence({ act: { seq: Date.now(), v: this.hostVer, keys: actions.map(actionKey) } }).catch(() => {
+    this.predicted = predict(v, actions);
+    this.set({ sending: true, view: this.predicted ?? v });
+    const giveUp = () => {
+      // No answer: show the host's table again and let the player retry.
       this.sentFor = -1;
-      this.set({ sending: false });
-    });
+      this.settle();
+      this.onPeers(this.room.peers());
+    };
+    window.clearTimeout(this.sendTimer);
+    this.sendTimer = window.setTimeout(giveUp, 8000);
+    void this.room.presence({ act: { seq: Date.now(), v: this.hostVer, keys: actions.map(actionKey) } }).catch(giveUp);
   }
 }
 
 export type AnySession = HostSession | GuestSession;
+
+/**
+ * What the table will look like after these moves, for cards played from our
+ * hand: they leave the hand and land on the pile at once. Draws and other
+ * moves depend on hidden cards, so those wait for the host (null).
+ */
+function predict(v: TableView, actions: Action[]): TableView | null {
+  const me = v.you;
+  if (me === null || !actions.length || !actions.every((a) => a.type === "play")) return null;
+  const hand = [...(v.hands[me] ?? [])];
+  const events = [...v.events];
+  let color = v.color;
+  let top = v.top;
+  for (const a of actions) {
+    if (a.type !== "play") return null;
+    const i = hand.indexOf(a.card);
+    if (i < 0) return null;
+    hand.splice(i, 1);
+    const { rank, color: own } = parseCard(a.card);
+    if (a.color) color = a.color;
+    else if (rank !== "custom") color = own;
+    top = a.card;
+    events.push({ t: v.turn, event: "play", player: me, card: a.card, color });
+  }
+  const lastRank = parseCard(top).rank;
+  const goesAgain = lastRank === "skip" || lastRank === "reverse";
+  const hands = [...v.hands];
+  hands[me] = hand;
+  const handSizes = [...v.handSizes];
+  handSizes[me] = hand.length;
+  return {
+    ...v, hands, handSizes, events, top, color, legal: [], pending: null,
+    current: goesAgain || !hand.length ? me : 1 - me,
+  };
+}
 
 /**
  * Apply `seat`'s moves in order, each checked against the rules; stop at the

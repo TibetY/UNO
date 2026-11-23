@@ -33,7 +33,10 @@ export interface TableView {
   points: number;
   turn: number;
   drawn: number[];
+  /** The game's events, possibly only the latest few (see eventBase). */
   events: GameEvent[];
+  /** How many earlier events were left out, so events[i] is event number eventBase + i. */
+  eventBase: number;
 }
 
 export function viewFromGame(
@@ -67,6 +70,7 @@ export function viewFromGame(
     turn: g.turn,
     drawn: [...g.stats.cardsDrawn],
     events: o.eventLimit ? g.events.slice(-o.eventLimit) : [...g.events],
+    eventBase: o.eventLimit ? Math.max(0, g.events.length - o.eventLimit) : 0,
   };
 }
 

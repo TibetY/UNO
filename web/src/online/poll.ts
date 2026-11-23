@@ -6,8 +6,12 @@
  */
 import type { Peer, RoomProvider, SharedRoom } from "./transport";
 
-const FAST_MS = 700;
-const SLOW_MS = 3000;
+/** Check every half second while the game is moving... */
+const FAST_MS = 500;
+/** ...and after this long with no changes, slow down to save function calls. */
+const QUIET_AFTER_MS = 30_000;
+const SLOW_MS = 2000;
+const HIDDEN_MS = 6000;
 
 class PollRoom implements SharedRoom {
   readonly kind = "online" as const;
@@ -18,7 +22,7 @@ class PollRoom implements SharedRoom {
   private connListeners = new Set<(c: boolean) => void>();
   private connected = false;
   private failures = 0;
-  private interval = FAST_MS;
+  private lastChange = Date.now();
   private timer: number | undefined;
   private inFlight = false;
   private again = false;
@@ -36,7 +40,7 @@ class PollRoom implements SharedRoom {
 
   /** Check now (e.g. right after this player moved). */
   private kick() {
-    this.interval = FAST_MS;
+    this.lastChange = Date.now();
     if (this.inFlight) this.again = true;
     else void this.poll();
   }
@@ -69,9 +73,10 @@ class PollRoom implements SharedRoom {
       this.again = false;
       return void this.poll();
     }
-    // Speed up while things are changing; back off when quiet or hidden.
-    this.interval = changed ? FAST_MS : Math.min(SLOW_MS, this.interval * 1.4);
-    const wait = document.visibilityState === "hidden" ? SLOW_MS * 2 : this.interval;
+    // Fast while the game is moving; slower when it's been quiet or the page is hidden.
+    if (changed) this.lastChange = Date.now();
+    const quiet = Date.now() - this.lastChange > QUIET_AFTER_MS;
+    const wait = document.visibilityState === "hidden" ? HIDDEN_MS : quiet ? SLOW_MS : FAST_MS;
     this.timer = window.setTimeout(() => void this.poll(), wait);
   }
 

@@ -152,7 +152,7 @@ function OnlineGame({ session, onLeave }: { session: AnySession; onLeave: () => 
             busy={s.sending || !s.connected}
             onActions={(as) => session.actMany(as)}
             seatExtra={scoreChips}
-            status={s.sending ? "Sending…" : undefined}
+            status={s.sending && s.view.current === s.view.you ? "Sending…" : undefined}
             gameOverActions={host
               ? <button className="btn primary" onClick={() => (session as HostSession).newGame()}>Rematch</button>
               : <span className="help">Waiting for {s.oppName} to start a rematch…</span>}

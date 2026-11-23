@@ -430,8 +430,10 @@ function hash(s: string) {
 /** The discard pile: the last few cards, fanned. New cards fly in from the hand that played them. */
 function DiscardPile({ v }: { v: TableView }) {
   const motion = useContext(MotionContext)!;
+  // Keys use each event's absolute number, so a sliding window of events
+  // (online guests get only the latest few) doesn't look like new cards.
   const played = v.events
-    .map((e, i) => ({ e, i }))
+    .map((e, i) => ({ e, i: (v.eventBase ?? 0) + i }))
     .filter(({ e }) => (e.event === "play" || e.event === "start_card") && e.card);
   if (!played.length || played[played.length - 1].e.card !== v.top) {
     played.push({ e: { t: v.turn, event: "play", player: null, card: v.top }, i: -1 });
