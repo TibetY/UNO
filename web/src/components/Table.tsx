@@ -113,8 +113,16 @@ export function Table({ view: v, onActions, busy, status, seatExtra, gameOverAct
     // again straight after, so you just tap the next card.
     const rank = parseCard(k.card).rank;
     const extraTurn = rank === "skip" || rank === "reverse";
+    const color = parseCard(k.card).color;
+    // Partners: the same number or symbol; with C House multi-play, a Skip and a
+    // Reverse of the same color also go together.
+    const isPartner = (o: Keyed) => {
+      const p = parseCard(o.card);
+      if (p.rank === rank) return true;
+      return v.rules.multiPlay && extraTurn && (p.rank === "skip" || p.rank === "reverse") && p.color === color;
+    };
     const hasPartner = (v.rules.multiPlay || extraTurn) &&
-      myHand.some((o) => o.key !== k.key && parseCard(o.card).rank === rank && finishOk(o.card, myHand.length - 2));
+      myHand.some((o) => o.key !== k.key && isPartner(o) && finishOk(o.card, myHand.length - 2));
     if (hasPartner && v.phase !== "multi") setSelected([k]);
     else playChain([k.card]);
   };
