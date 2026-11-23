@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { HOUSE_RULES, type Rules } from "./engine/engine";
+import { HOUSE_RULES, OG_RULES, type Rules } from "./engine/engine";
+import { Card, CustomCardContext, customEffect } from "./components/Card";
 import { OnlinePage } from "./components/OnlinePage";
 import { PlayPage } from "./components/PlayPage";
 import { SimPage } from "./components/SimPage";
@@ -75,26 +76,74 @@ export function App() {
         <div id="page-online" hidden={view !== "online"}><OnlinePage provider={provider} rules={rules} initialCode={code} /></div>
         <div id="page-watch" hidden={view !== "watch"}><WatchPage rules={rules} active={view === "watch"} /></div>
         <div id="page-sim" hidden={view !== "sim"}><SimPage rules={rules} /></div>
-        <RulesPanel rules={rules} onChange={updateRules} />
+        <RulesPanel rules={rules} onChange={updateRules} onReplace={(r) => { setRules(r); save("rules", r); }} />
       </main>
     </>
   );
 }
 
-function RulesPanel({ rules, onChange }: { rules: Rules; onChange: (p: Partial<Rules>) => void }) {
+const RULE_SETS: { id: string; name: string; rules: Rules; blurb: string }[] = [
+  { id: "c-house", name: "C House Rules", rules: HOUSE_RULES,
+    blurb: "Play several of the same card at once, stack +2 on +2 and +4 on +4, finish only on a number, and 2 custom cards." },
+  { id: "og", name: "OG", rules: OG_RULES, blurb: "The official rules." },
+];
+
+function sameRules(a: Rules, b: Rules) {
+  return (Object.keys(b) as (keyof Rules)[]).every((k) => k === "maxTurns" || a[k] === b[k]);
+}
+
+function RulesPanel({ rules, onChange, onReplace }: {
+  rules: Rules; onChange: (p: Partial<Rules>) => void; onReplace: (r: Rules) => void;
+}) {
+  const set = RULE_SETS.find((r) => sameRules(rules, r.rules));
+  const num = (v: string, lo: number, hi: number, fallback: number) => Math.max(lo, Math.min(hi, Math.floor(Number(v)) || (v === "0" ? 0 : fallback)));
+  const preview = { customColor: rules.customColor, customSkip: rules.customSkip, customDraw: rules.customDraw };
   return (
     <details className="panel rules">
-      <summary>Rule options <small>apply to new games</small></summary>
+      <summary>Rules: <b>{set ? set.name : "Custom"}</b> <small>changes apply from the next game</small></summary>
+      <div className="field rule-set">
+        <label htmlFor="ruleset">Rule set</label>
+        <select id="ruleset" value={set?.id ?? "custom"}
+          onChange={(e) => { const r = RULE_SETS.find((x) => x.id === e.target.value); if (r) onReplace(r.rules); }}>
+          {RULE_SETS.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          {!set && <option value="custom">Custom (your changes)</option>}
+        </select>
+        <small className="help">{set ? set.blurb : "Your own mix. Pick a rule set to start over from it."}</small>
+      </div>
+
+      <h4>House rules</h4>
       <div className="rules-grid">
         <label className="check"><input type="checkbox" checked={rules.multiPlay} onChange={(e) => onChange({ multiPlay: e.target.checked })} /> Play several of the same number or symbol in one turn</label>
         <label className="check"><input type="checkbox" checked={rules.stackDraws} onChange={(e) => onChange({ stackDraws: e.target.checked })} /> Stack +2 on +2, or +4 on +4, to pass the penalty on</label>
         <label className="check"><input type="checkbox" checked={rules.numberFinish} onChange={(e) => onChange({ numberFinish: e.target.checked })} /> You can only go out on a number card</label>
+      </div>
+
+      <h4>Custom card</h4>
+      <div className="custom-rules">
+        <div className="custom-preview" aria-hidden="true">
+          <CustomCardContext.Provider value={preview}><Card id="custom" /></CustomCardContext.Provider>
+        </div>
+        <div className="rules-grid">
+          <label className="check">Custom cards in the deck
+            <input type="number" min={0} max={8} value={rules.customCards} onChange={(e) => onChange({ customCards: num(e.target.value, 0, 8, 0) })} />
+          </label>
+          <label className="check">Opponent picks up
+            <input type="number" min={0} max={20} value={rules.customDraw} onChange={(e) => onChange({ customDraw: num(e.target.value, 0, 20, 0) })} />
+          </label>
+          <label className="check"><input type="checkbox" checked={rules.customColor} onChange={(e) => onChange({ customColor: e.target.checked })} /> Player chooses the color</label>
+          <label className="check"><input type="checkbox" checked={rules.customSkip} onChange={(e) => onChange({ customSkip: e.target.checked })} /> Player goes again (skip)</label>
+          <p className="help">This card: {customEffect(preview)}. {rules.customCards === 0 ? "There are none in the deck right now." : `${rules.customCards} in the deck.`}</p>
+        </div>
+      </div>
+
+      <h4>Other options</h4>
+      <div className="rules-grid">
         <label className="check"><input type="checkbox" checked={rules.drawUntilPlayable} onChange={(e) => onChange({ drawUntilPlayable: e.target.checked })} /> Draw until you get a playable card</label>
         <label className="check"><input type="checkbox" checked={!rules.playDrawnCard} onChange={(e) => onChange({ playDrawnCard: !e.target.checked })} /> A drawn card can't be played the same turn</label>
         <label className="check"><input type="checkbox" checked={rules.wd4Restricted} onChange={(e) => onChange({ wd4Restricted: e.target.checked })} /> Wild Draw Four only when you can't follow the color</label>
         <label className="check"><input type="checkbox" checked={!rules.allowWd4Challenge} onChange={(e) => onChange({ allowWd4Challenge: !e.target.checked })} /> No Wild Draw Four challenges</label>
         <label className="check">Hand size
-          <input type="number" min={1} max={20} value={rules.handSize} onChange={(e) => onChange({ handSize: Math.max(1, Math.min(20, Number(e.target.value) || 7)) })} />
+          <input type="number" min={1} max={20} value={rules.handSize} onChange={(e) => onChange({ handSize: num(e.target.value, 1, 20, 7) })} />
         </label>
       </div>
     </details>

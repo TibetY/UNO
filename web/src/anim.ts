@@ -10,6 +10,13 @@ export const PLAY_MS = 560;         // hand → pile
 export const PLAY_STAGGER = 260;    // several cards played at once
 export const SHIFT_MS = 420;        // cards sliding to make or close a gap
 export const EASE = "cubic-bezier(.22, .68, .24, 1)";
+/** Big pick-ups (a stacked +20) speed up so the whole draw lands within this. */
+const MAX_DRAW_SPREAD = 2000;
+
+/** Gap between cards when `count` cards are drawn at once. */
+export function drawStagger(count: number): number {
+  return count > 1 ? Math.min(DRAW_STAGGER, MAX_DRAW_SPREAD / (count - 1)) : DRAW_STAGGER;
+}
 
 /** How long the card motion for these new events takes to finish. */
 export function dealAnimationMs(events: readonly GameEvent[], handSize: number): number {
@@ -17,7 +24,7 @@ export function dealAnimationMs(events: readonly GameEvent[], handSize: number):
   let plays = 0;
   for (const e of events) {
     if (e.event === "deal") ms = Math.max(ms, handSize * DEAL_STAGGER + FLIGHT_MS);
-    else if (e.event === "draw" && e.count) ms += (Math.min(e.count, 12) - 1) * DRAW_STAGGER + FLIGHT_MS;
+    else if (e.event === "draw" && e.count) ms += (e.count - 1) * drawStagger(e.count) + FLIGHT_MS;
     else if (e.event === "play") plays++;
   }
   if (plays) ms += PLAY_MS + (plays - 1) * PLAY_STAGGER;

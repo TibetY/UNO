@@ -1,9 +1,10 @@
 export const COLORS = ["red", "yellow", "green", "blue"] as const;
 export type Color = (typeof COLORS)[number];
-export const RANKS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "skip", "reverse", "draw2", "wild", "wild4"] as const;
+/** "custom" is the house-rules blank card; what it does is set in the rules. */
+export const RANKS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "skip", "reverse", "draw2", "wild", "wild4", "custom"] as const;
 export type Rank = (typeof RANKS)[number];
 
-/** Cards are plain strings: "red:5", "blue:skip", "wild", "wild4". */
+/** Cards are plain strings: "red:5", "blue:skip", "wild", "wild4", "custom". */
 export type CardId = string;
 
 export interface CardParts {
@@ -22,33 +23,37 @@ export function makeCard(rank: Rank, color: Color | null): CardId {
 }
 
 export const isWild = (r: Rank) => r === "wild" || r === "wild4";
+/** No color of its own; can be played on anything. */
+export const isColorless = (r: Rank) => isWild(r) || r === "custom";
 export const isNumber = (r: Rank) => r.length === 1;
 
 export function points(id: CardId): number {
   const { rank } = parseCard(id);
   if (isNumber(rank)) return Number(rank);
-  return isWild(rank) ? 50 : 20;
+  return isColorless(rank) ? 50 : 20;
 }
 
 /** Can `card` be played on `top` when the active color is `color` (null = anything goes)? */
 export function matches(card: CardId, top: CardId, color: Color | null): boolean {
   const c = parseCard(card);
-  if (isWild(c.rank) || color === null) return true;
+  if (isColorless(c.rank) || color === null) return true;
   return c.color === color || c.rank === parseCard(top).rank;
 }
 
 /** Standard 108-card deck. */
-export function buildDeck(): CardId[] {
+/** Standard 108-card deck, plus `custom` blank custom cards. */
+export function buildDeck(custom = 0): CardId[] {
   const deck: CardId[] = [];
   for (const color of COLORS) {
     deck.push(makeCard("0", color));
     for (const rank of RANKS.slice(1, 13)) deck.push(makeCard(rank, color), makeCard(rank, color));
   }
   for (let i = 0; i < 4; i++) deck.push("wild", "wild4");
+  for (let i = 0; i < custom; i++) deck.push("custom");
   return deck;
 }
 
-const RANK_NAMES: Partial<Record<Rank, string>> = { skip: "Skip", reverse: "Reverse", draw2: "Draw Two", wild: "Wild", wild4: "Wild Draw Four" };
+const RANK_NAMES: Partial<Record<Rank, string>> = { skip: "Skip", reverse: "Reverse", draw2: "Draw Two", wild: "Wild", wild4: "Wild Draw Four", custom: "Custom card" };
 export const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 export const rankName = (r: Rank) => RANK_NAMES[r] ?? r;
 

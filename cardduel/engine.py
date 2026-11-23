@@ -15,6 +15,9 @@ House rules (off by default, see ``Rules``):
     (any color) in the same turn. Draw cards add up: two +2s = draw 4.
   * stack_draws: when hit by a +2 you may answer with a +2, and when hit by a
     +4 with a +4; the total passes to the other player.
+  * custom_cards: adds blank custom cards to the deck. What they do is set by
+    custom_color (choose a color), custom_skip (the player goes again) and
+    custom_draw (the opponent draws N; stacks only on another custom card).
   * number_finish: you can only go out on a number card. An action card
     (Skip, Reverse, +2, wilds) can't be your last card.
 """
@@ -85,6 +88,10 @@ class Rules:
     multi_play: bool = False
     stack_draws: bool = False
     number_finish: bool = False
+    custom_cards: int = 0       # blank custom cards in the deck
+    custom_color: bool = True   # custom card: player picks the color
+    custom_skip: bool = False   # custom card: player goes again
+    custom_draw: int = 10       # custom card: opponent draws this many (0 = none)
     # Safety valve against (extremely rare) endless games.
     max_turns: int = 1000
 
@@ -141,7 +148,7 @@ class Game:
         self.record_events = record_events
 
         self.hands: List[List[Card]] = [[], []]
-        self.draw_pile: List[Card] = build_deck()
+        self.draw_pile: List[Card] = build_deck(self.rules.custom_cards)
         self.rng.shuffle(self.draw_pile)
         self.discard: List[Card] = []
         self.current_color: Optional[Color] = None
@@ -176,7 +183,7 @@ class Game:
         # Flip the starting card; a Wild Draw Four goes back and we reshuffle.
         while True:
             card = self.draw_pile.pop()
-            if card.rank is Rank.WILD_DRAW_FOUR:
+            if card.rank in (Rank.WILD_DRAW_FOUR, Rank.CUSTOM):
                 self.draw_pile.append(card)
                 self.rng.shuffle(self.draw_pile)
                 continue
@@ -270,8 +277,11 @@ class Game:
             return False
         return any(c.color == self.current_color for c in self.hands[player])
 
+    def _picks_color(self, card: Card) -> bool:
+        return card.rank.is_wild or (card.rank is Rank.CUSTOM and self.rules.custom_color)
+
     def _play_actions(self, card: Card) -> List[Action]:
-        if card.rank.is_wild:
+        if self._picks_color(card):
             return [Action(ActionType.PLAY, card, c) for c in COLORS]
         return [Action(ActionType.PLAY, card)]
 
@@ -392,7 +402,10 @@ class Game:
             self.stats.extra_cards[p] += 1
         self.hands[p].remove(card)
         self.discard.append(card)
-        self.current_color = action.color if card.rank.is_wild else card.color
+        if self._picks_color(card):
+            self.current_color = action.color
+        elif card.rank is not Rank.CUSTOM:  # a custom card without color choice keeps the color
+            self.current_color = card.color
         self.stats.cards_played[p] += 1
         rk = self.stats.played_by_rank[p]
         rk[card.rank.value] = rk.get(card.rank.value, 0) + 1
@@ -416,8 +429,9 @@ class Game:
         rank, n = self._batch_rank, self._batch_count
         self._batch_rank = None
         opp = 1 - p
-        if rank in (Rank.DRAW_TWO, Rank.WILD_DRAW_FOUR):
-            self.pending_draw += (2 if rank is Rank.DRAW_TWO else 4) * n
+        per_card = {Rank.DRAW_TWO: 2, Rank.WILD_DRAW_FOUR: 4, Rank.CUSTOM: self.rules.custom_draw}.get(rank, 0)
+        if per_card > 0:
+            self.pending_draw += per_card * n
             self._offender = p
             if won:
                 self._draw(opp, self.pending_draw)
@@ -439,7 +453,8 @@ class Game:
         if won:
             self._finish(p, "out_of_cards")
         else:
-            self._end_turn(p if rank in (Rank.SKIP, Rank.REVERSE) else opp)
+            goes_again = rank in (Rank.SKIP, Rank.REVERSE) or (rank is Rank.CUSTOM and self.rules.custom_skip)
+            self._end_turn(p if goes_again else opp)
 
     def _resolve_response(self, victim: int, action: Action) -> None:
         offender, owed = self._offender, self.pending_draw

@@ -19,6 +19,8 @@ from .simulate import CSV_FIELDS, format_summary, play_game, run_match, summariz
 
 
 def _rules(args) -> Rules:
+    if args.rules == "c-house":
+        args.house = True
     return Rules(
         hand_size=args.hand_size,
         play_drawn_card=not args.no_play_drawn,
@@ -28,6 +30,10 @@ def _rules(args) -> Rules:
         multi_play=args.multi_play or args.house,
         stack_draws=args.stack_draws or args.house,
         number_finish=args.number_finish or args.house,
+        custom_cards=args.custom_cards if args.custom_cards is not None else (2 if args.house else 0),
+        custom_color=not args.custom_no_color,
+        custom_skip=args.custom_skip,
+        custom_draw=args.custom_draw,
         max_turns=args.max_turns,
     )
 
@@ -176,7 +182,14 @@ def main(argv=None) -> None:
                        help="house rule: stack +2/+4 cards to pass the penalty on")
         g.add_argument("--number-finish", action="store_true",
                        help="house rule: you can only go out on a number card")
-        g.add_argument("--house", action="store_true", help="all three house rules")
+        g.add_argument("--custom-cards", type=int, default=None,
+                       help="blank custom cards in the deck (default 0; 2 with --rules c-house)")
+        g.add_argument("--custom-draw", type=int, default=10, help="custom card: opponent picks up this many")
+        g.add_argument("--custom-skip", action="store_true", help="custom card: the player goes again")
+        g.add_argument("--custom-no-color", action="store_true", help="custom card: no color choice")
+        g.add_argument("--rules", choices=["og", "c-house"], default="og",
+                       help="rule set: og (official) or c-house (C House Rules: everything below on)")
+        g.add_argument("--house", action="store_true", help="same as --rules c-house")
         g.add_argument("--max-turns", type=int, default=1000)
 
     choices = sorted(AGENTS)

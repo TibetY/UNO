@@ -43,7 +43,7 @@ export interface OnlineState {
 
 const APP = "card-duel";
 const MAX_PRESENCE = 3600;
-const CARD_RE = /^(?:(?:red|yellow|green|blue):(?:\d|skip|reverse|draw2)|wild4?)$/;
+const CARD_RE = /^(?:(?:red|yellow|green|blue):(?:\d|skip|reverse|draw2)|wild4?|custom)$/;
 
 export const cleanName = (s: unknown, fallback: string) =>
   typeof s === "string" && s.trim() ? s.trim().replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁠-⁯]/g, "").slice(0, 24) : fallback;
@@ -232,7 +232,15 @@ export class GuestSession extends Session {
     if (seat && seat !== me) return this.set({ status: "full", oppName });
     if (typeof pr.v === "number") this.hostVer = pr.v;
     const view = validView(pr.st) ? decodeView(pr.st) : null;
-    if (view) view.names = [oppName, this.state.myName];
+    if (view) {
+      view.names = [oppName, this.state.myName];
+      const r = view.rules as Partial<TableView["rules"]>;
+      view.rules = {
+        multiPlay: !!r.multiPlay, stackDraws: !!r.stackDraws, numberFinish: !!r.numberFinish,
+        customColor: r.customColor !== false, customSkip: !!r.customSkip,
+        customDraw: Math.max(0, Math.min(99, Math.floor(Number(r.customDraw) || 0))),
+      };
+    }
     const sc = Array.isArray(pr.sc) && pr.sc.length === 2 ? (pr.sc as number[]).map((x) => Number(x) || 0) : [0, 0];
     this.set({
       status: view ? "playing" : "looking",

@@ -226,6 +226,43 @@ class HouseRuleTests(unittest.TestCase):
         self.assertEqual(types[:2], [ActionType.CHALLENGE, ActionType.ACCEPT])
         self.assertEqual(types.count(ActionType.PLAY), 4)
 
+    def test_custom_card_default_plus_ten_with_color(self):
+        self.assertEqual(len(build_deck(2)), 110)
+        rules = Rules(custom_cards=2)
+        g = setup([Card(Rank.CUSTOM), Card(Rank.ONE, Y)], [Card(Rank.ONE, G)], Card(Rank.FIVE, R),
+                  draw=[Card(Rank.NINE, Y)] * 30, rules=rules)
+        plays = [a for a in g.legal_actions() if a.type is ActionType.PLAY]
+        self.assertEqual(len(plays), 4)  # one per color
+        g.step(Action(ActionType.PLAY, Card(Rank.CUSTOM), B))
+        self.assertEqual((len(g.hands[1]), g.current_player, g.current_color), (11, 0, B))
+        self.assertEqual(Card(Rank.CUSTOM).points, 50)
+
+    def test_custom_card_skip_without_color(self):
+        rules = Rules(custom_cards=2, custom_color=False, custom_skip=True, custom_draw=0)
+        g = setup([Card(Rank.CUSTOM), Card(Rank.ONE, Y)], [Card(Rank.ONE, G)], Card(Rank.FIVE, R), rules=rules)
+        self.assertEqual([a for a in g.legal_actions() if a.type is ActionType.PLAY],
+                         [Action(ActionType.PLAY, Card(Rank.CUSTOM))])
+        g.step(Action(ActionType.PLAY, Card(Rank.CUSTOM)))
+        self.assertEqual((g.current_player, g.current_color, len(g.hands[1])), (0, R, 1))
+
+    def test_custom_cards_stack_like_on_like(self):
+        rules = Rules(custom_cards=2, stack_draws=True, custom_draw=5)
+        g = setup([Card(Rank.CUSTOM), Card(Rank.ONE, Y)], [Card(Rank.CUSTOM), Card(Rank.DRAW_TWO, G)],
+                  Card(Rank.FIVE, R), draw=[Card(Rank.NINE, Y)] * 30, rules=rules)
+        g.step(Action(ActionType.PLAY, Card(Rank.CUSTOM), B))
+        self.assertEqual((g.phase, g.pending_draw), (Phase.RESPOND, 5))
+        self.assertEqual(sorted({a.card.rank for a in g.legal_actions() if a.type is ActionType.PLAY}), [Rank.CUSTOM])
+        g.step(Action(ActionType.PLAY, Card(Rank.CUSTOM), G))
+        self.assertEqual((len(g.hands[0]), g.current_player), (11, 1))
+
+    def test_bots_finish_with_custom_cards(self):
+        for rules in (Rules(multi_play=True, stack_draws=True, number_finish=True, custom_cards=4),
+                      Rules(custom_cards=4, custom_color=False, custom_skip=True, custom_draw=3)):
+            for seed in range(100):
+                g = play_game([make_agent("heuristic"), make_agent("greedy")], seed=seed, starter=seed % 2, rules=rules)
+                self.assertTrue(g.is_over)
+                self.assertEqual(sorted(all_cards(g)), sorted(build_deck(4)))
+
     def test_bots_finish_under_house_rules(self):
         for seed in range(200):
             g = play_game([make_agent("heuristic"), make_agent("random")], seed=seed, starter=seed % 2, rules=HOUSE)

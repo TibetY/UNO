@@ -35,6 +35,9 @@ class Rank(str, Enum):
     DRAW_TWO = "draw2"
     WILD = "wild"
     WILD_DRAW_FOUR = "wild4"
+    # House-rules card with a blank face: what it does is set in the rules
+    # (choose a color, skip, make the opponent draw N). See ``Rules``.
+    CUSTOM = "custom"
 
     @property
     def is_number(self) -> bool:
@@ -45,6 +48,11 @@ class Rank(str, Enum):
         return self in (Rank.WILD, Rank.WILD_DRAW_FOUR)
 
     @property
+    def is_colorless(self) -> bool:
+        """No color of its own; can be played on anything."""
+        return self.is_wild or self is Rank.CUSTOM
+
+    @property
     def is_action(self) -> bool:
         return not self.is_number
 
@@ -53,6 +61,7 @@ class Rank(str, Enum):
 
 
 NUMBER_RANKS = tuple(r for r in Rank if r.is_number)
+
 COLORED_ACTION_RANKS = (Rank.SKIP, Rank.REVERSE, Rank.DRAW_TWO)
 
 
@@ -64,16 +73,16 @@ class Card:
     color: Optional[Color] = None
 
     def __post_init__(self) -> None:
-        if self.rank.is_wild and self.color is not None:
+        if self.rank.is_colorless and self.color is not None:
             raise ValueError("wild cards have no color")
-        if not self.rank.is_wild and self.color is None:
+        if not self.rank.is_colorless and self.color is None:
             raise ValueError("non-wild cards need a color")
 
     @property
     def points(self) -> int:
         if self.rank.is_number:
             return int(self.rank.value)
-        if self.rank.is_wild:
+        if self.rank.is_colorless:
             return 50
         return 20
 
@@ -83,19 +92,19 @@ class Card:
         ``current_color`` is the active color (it differs from ``top.color``
         after a wild). ``None`` means any color is acceptable (wild opening card).
         """
-        if self.rank.is_wild:
+        if self.rank.is_colorless:
             return True
         if current_color is None:
             return True
         return self.color == current_color or self.rank == top.rank
 
     def short(self) -> str:
-        if self.rank.is_wild:
+        if self.rank.is_colorless:
             return self.rank.value.upper()
         return f"{self.color.value[0].upper()}{self.rank.value}"
 
     def to_str(self) -> str:
-        if self.rank.is_wild:
+        if self.rank.is_colorless:
             return self.rank.value
         return f"{self.color.value}:{self.rank.value}"
 
@@ -110,8 +119,8 @@ class Card:
         return self.to_str()
 
 
-def build_deck() -> List[Card]:
-    """Standard 108-card deck.
+def build_deck(custom_cards: int = 0) -> List[Card]:
+    """Standard 108-card deck, plus ``custom_cards`` blank custom cards.
 
     Per color: one 0, two each of 1-9, two each of skip/reverse/draw2 (25 cards).
     Plus 4 wild and 4 wild-draw-four.
@@ -124,4 +133,5 @@ def build_deck() -> List[Card]:
             deck.append(Card(rank, color))
     deck.extend(Card(Rank.WILD) for _ in range(4))
     deck.extend(Card(Rank.WILD_DRAW_FOUR) for _ in range(4))
+    deck.extend(Card(Rank.CUSTOM) for _ in range(custom_cards))
     return deck

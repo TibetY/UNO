@@ -1,4 +1,4 @@
-import { COLORS, type CardId, type Color, isWild, parseCard, points } from "./cards";
+import { COLORS, type CardId, type Color, isColorless, isWild, parseCard, points } from "./cards";
 import type { Action, GameResult, Observation } from "./engine";
 import { Rng } from "./rng";
 
@@ -47,9 +47,11 @@ export class GreedyAgent extends BaseAgent {
     const ps = plays(legal);
     if (obs.phase === "respond" && !ps.length) return find(legal, "accept");
     if (!ps.length) return legal[0];
-    const colored = ps.filter((a) => !isWild(parseCard(a.card).rank));
+    const colored = ps.filter((a) => !isColorless(parseCard(a.card).rank));
     if (colored.length) return colored.reduce((b, a) => (points(a.card) > points(b.card) ? a : b));
-    const wild = ps.some((a) => a.card === "wild") ? "wild" : "wild4";
+    const wild = ps.some((a) => a.card === "wild") ? "wild" : ps.some((a) => a.card === "custom") ? "custom" : "wild4";
+    const noColor = ps.find((a) => a.card === wild && !a.color);
+    if (noColor) return noColor; // a custom card that doesn't pick a color
     const rest = [...obs.hand];
     rest.splice(rest.indexOf(wild), 1);
     const counts = colorCounts(rest);
@@ -113,12 +115,12 @@ export class HeuristicAgent extends BaseAgent {
   act(obs: Observation, legal: Action[]): Action {
     const ps = plays(legal);
     if (obs.phase === "respond") {
-      // Stacking passes the penalty on: always worth it. Prefer a +2 over a +4.
-      const stack = ps.find((a) => a.card !== "wild4") ?? ps.find((a) => a.card === "wild4");
+      // Stacking passes the penalty on: always worth it.
+      const stack = ps[0];
       if (stack) {
-        if (stack.card !== "wild4") return stack;
-        const col = this.chooseColor(obs, "wild4");
-        return ps.find((a) => a.card === "wild4" && a.color === col)!;
+        if (!stack.color) return stack;
+        const col = this.chooseColor(obs, stack.card);
+        return ps.find((a) => a.card === stack.card && a.color === col)!;
       }
       return legal.some((a) => a.type === "challenge") ? this.challenge(obs, legal) : find(legal, "accept");
     }
@@ -126,8 +128,9 @@ export class HeuristicAgent extends BaseAgent {
       // Dump extra copies, but keep spare wilds unless we're close to going out.
       const next = ps[0];
       if (!next) return find(legal, "done");
-      if (!isWild(parseCard(next.card).rank)) return next;
+      if (!isColorless(parseCard(next.card).rank)) return next;
       if (obs.hand.length > 3 && obs.opponentHandSize > 2) return find(legal, "done");
+      if (!next.color) return next;
       const col = this.chooseColor(obs, next.card);
       return ps.find((a) => a.card === next.card && a.color === col)!;
     }
@@ -143,6 +146,8 @@ export class HeuristicAgent extends BaseAgent {
       const { rank, color } = parseCard(card);
       if (rank === "wild4") return hasCurrent ? -100 : -30 + (oppLow ? 60 : 0);
       if (rank === "wild") return -20 + (oppLow ? 10 : 0);
+      // Hold it like a wild; a big pick-up is a finisher when they're low.
+      if (rank === "custom") return -20 + (oppLow ? (obs.rules.customDraw > 0 ? 40 : 10) : 0);
       let v = (counts.get(color!) ?? 0) * 3 + points(card) * 0.1;
       // With multi-play, a rank we hold several of empties the hand faster.
       if (multi) v += (hand.filter((h) => parseCard(h).rank === rank).length - 1) * 4;
@@ -162,8 +167,8 @@ export class HeuristicAgent extends BaseAgent {
     }
     if (obs.phase === "drew" && bestV < -50) return find(legal, "pass");
     if (obs.phase === "turn" && bestV < -50) return find(legal, "draw");
-    if (obs.phase === "turn" && isWild(parseCard(best.card).rank) && hand.length > 4 && !oppLow) return find(legal, "draw");
-    if (isWild(parseCard(best.card).rank)) {
+    if (obs.phase === "turn" && isColorless(parseCard(best.card).rank) && hand.length > 4 && !oppLow) return find(legal, "draw");
+    if (isColorless(parseCard(best.card).rank) && best.color) {
       const col = this.chooseColor(obs, best.card);
       return ps.find((a) => a.card === best.card && a.color === col)!;
     }

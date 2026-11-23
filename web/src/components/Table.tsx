@@ -2,9 +2,9 @@ import { type ReactNode, useContext, useEffect, useLayoutEffect, useMemo, useRef
 import { COLORS, type CardId, type Color, cap, cardLabel, isWild, matches, parseCard, rankName, sortHand } from "../engine/cards";
 import type { Action, GameEvent } from "../engine/engine";
 import type { TableView } from "../view";
-import { Card, CardBack } from "./Card";
+import { Card, CardBack, CustomCardContext } from "./Card";
 import {
-  DEAL_STAGGER, DRAW_STAGGER, EASE, FLIGHT_MS, MotionContext, PLAY_MS, PLAY_STAGGER, SHIFT_MS,
+  DEAL_STAGGER, EASE, FLIGHT_MS, MotionContext, PLAY_MS, PLAY_STAGGER, SHIFT_MS, drawStagger,
   type TableMotion, flyFrom, reducedMotion,
 } from "../anim";
 
@@ -85,8 +85,13 @@ export function Table({ view: v, onActions, busy, status, seatExtra, gameOverAct
     !!last && !isSelected(k.key) && canFollow(last.card, k.card, v.rules.multiPlay) &&
     finishOk(k.card, myHand.length - selected.length - 1);
 
+  /** Does playing this card ask for a color? */
+  const picksColor = (c: CardId) => {
+    const r = parseCard(c).rank;
+    return isWild(r) || (r === "custom" && v.rules.customColor);
+  };
   const playChain = (cards: CardId[]) => {
-    if (cards.some((c) => isWild(parseCard(c).rank))) return setWildChain(cards);
+    if (cards.some(picksColor)) return setWildChain(cards);
     send(cards.map((card) => ({ type: "play", card })));
     setSelected([]);
   };
@@ -94,7 +99,7 @@ export function Table({ view: v, onActions, busy, status, seatExtra, gameOverAct
     const chain = wildChain ?? [];
     setWildChain(null);
     setSelected([]);
-    send(chain.map((card) => (isWild(parseCard(card).rank) ? { type: "play", card, color } : { type: "play", card })));
+    send(chain.map((card) => (picksColor(card) ? { type: "play", card, color } : { type: "play", card })));
   };
 
   const tapCard = (k: Keyed) => {
@@ -143,6 +148,7 @@ export function Table({ view: v, onActions, busy, status, seatExtra, gameOverAct
 
   return (
     <MotionContext.Provider value={motion}>
+     <CustomCardContext.Provider value={v.rules}>
       <div className="table">
         <Seat v={v} seat={top} position="top" extra={seatExtra?.[top]} />
 
@@ -213,6 +219,7 @@ export function Table({ view: v, onActions, busy, status, seatExtra, gameOverAct
 
         {over && !hideGameOver && <GameOver v={v} actions={gameOverActions} />}
       </div>
+     </CustomCardContext.Provider>
     </MotionContext.Provider>
   );
 }
@@ -233,7 +240,8 @@ function goesAgain(v: TableView): boolean {
 
 function respondText(v: TableView, opp: string, canStack: boolean, canChallenge: boolean): string {
   const n = v.pendingDraw;
-  const card = parseCard(v.top).rank === "wild4" ? "Wild Draw Four" : "Draw Two";
+  const topRank = parseCard(v.top).rank;
+  const card = topRank === "wild4" ? "Wild Draw Four" : topRank === "custom" ? "custom card" : "Draw Two";
   if (canStack) {
     return `${opp} hit you with +${n}. Stack a draw card to pass it on, or draw ${n}.` +
       (canChallenge ? ` You can also challenge (if you're wrong you draw ${n + 2}).` : "");
@@ -343,6 +351,8 @@ function Hand({ v, seat, small, cardState, onTap }: {
 
     const deckRect = motion.deck.current?.getBoundingClientRect();
     let arriving = 0;
+    const newCards = newGame ? 0 : items.filter((it) => !before!.pos.has(it.key)).length;
+    const gap = drawStagger(newCards);
     items.forEach((it, i) => {
       const el = slots.current.get(it.key);
       if (!el) return;
@@ -366,7 +376,7 @@ function Hand({ v, seat, small, cardState, onTap }: {
         );
       } else if (deckRect) {
         // New card: fly in from the deck.
-        const delay = newGame ? i * DEAL_STAGGER + (small ? DEAL_STAGGER / 2 : 0) : arriving++ * DRAW_STAGGER;
+        const delay = newGame ? i * DEAL_STAGGER + (small ? DEAL_STAGGER / 2 : 0) : arriving++ * gap;
         el.getAnimations().forEach((a) => a.cancel());
         flyFrom(el, deckRect, { duration: FLIGHT_MS, delay, rotate: small ? 8 : -10 });
       }
@@ -499,7 +509,11 @@ export function describeEvent(e: GameEvent, v: TableView): string | null {
   const who = e.player === null ? "" : playerName(v, e.player);
   switch (e.event) {
     case "start_card": return `Starting card: ${cardLabel(e.card!)}`;
-    case "play": return `${who} played ${cardLabel(e.card!)}${parseCard(e.card!).color ? "" : ` → ${e.color}`}`;
+    case "play": {
+      const r = parseCard(e.card!).rank;
+      const chose = isWild(r) || (r === "custom" && v.rules.customColor);
+      return `${who} played ${r === "custom" ? `a custom card` : cardLabel(e.card!)}${chose ? ` → ${e.color}` : ""}`;
+    }
     case "draw": return `${who} drew ${e.count} card${e.count === 1 ? "" : "s"}`;
     case "pass": return `${who} kept the card`;
     case "challenge": return `${who} challenged: ${e.success ? "caught a bluff!" : "it was legal"}`;

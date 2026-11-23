@@ -207,6 +207,36 @@ describe("house rules", () => {
     g.step(play("red:draw2"));
     expect([g.hands[1].length, g.current]).toEqual([3, 0]);
   });
+  it("custom card: default +10 with a color choice", () => {
+    expect(buildDeck(2).length).toBe(110);
+    const g = setup(["custom", "yellow:1"], ["green:1"], "red:5", { rules: { customCards: 2 }, draw: Array(30).fill("yellow:9") });
+    expect(g.legalActions().filter((a) => a.type === "play").length).toBe(4);
+    g.step(play("custom", "blue"));
+    expect([g.hands[1].length, g.current, g.color]).toEqual([11, 0, "blue"]);
+    expect(points("custom")).toBe(50);
+  });
+  it("custom card: skip without a color choice keeps the color", () => {
+    const g = setup(["custom", "yellow:1"], ["green:1"], "red:5", { rules: { customCards: 2, customColor: false, customSkip: true, customDraw: 0 } });
+    expect(g.legalActions().filter((a) => a.type === "play")).toEqual([play("custom")]);
+    g.step(play("custom"));
+    expect([g.current, g.color, g.hands[1].length]).toEqual([0, "red", 1]);
+  });
+  it("custom cards stack only on custom cards", () => {
+    const g = setup(["custom", "yellow:1"], ["custom", "green:draw2"], "red:5", { rules: { customCards: 2, stackDraws: true, customDraw: 5 }, draw: Array(30).fill("yellow:9") });
+    g.step(play("custom", "blue"));
+    expect([g.phase, g.pendingDraw]).toEqual(["respond", 5]);
+    expect(new Set(g.legalActions().filter((a) => a.type === "play").map((a) => (a as { card: string }).card))).toEqual(new Set(["custom"]));
+    g.step(play("custom", "green"));
+    expect([g.hands[0].length, g.current]).toEqual([11, 1]);
+  });
+  it("bots finish with custom cards in both setups", () => {
+    const setups = [{ ...house, customCards: 4 }, { customCards: 4, customColor: false, customSkip: true, customDraw: 3 }];
+    for (const rules of setups) for (let s = 0; s < 100; s++) {
+      const g = playGame([AGENTS.heuristic(), AGENTS.greedy()], s, s % 2, rules);
+      expect(g.isOver).toBe(true);
+      expect(all(g)).toEqual(buildDeck(4).sort());
+    }
+  });
   it("bots finish games and conserve cards under house rules", () => {
     for (let s = 0; s < 200; s++) {
       const g = playGame([AGENTS.heuristic(), AGENTS.random()], s, s % 2, house);
@@ -239,10 +269,10 @@ describe("simulation", () => {
     expect(Math.abs(g.winRate[0] - 0.5)).toBeLessThan(0.04);
     expect(g.turnsMean).toBeGreaterThan(28);
     expect(g.turnsMean).toBeLessThan(36);
-    // Python with all house rules: heuristic vs greedy ~48%, ~27 turns.
+    // Python, C House Rules (--rules c-house): heuristic vs greedy ~49%, ~29 turns.
     const h = summarize(await runMatch({ p0: "heuristic", p1: "greedy", games: 3000, seed: 3, rules: HOUSE_RULES }));
     expect(Math.abs(h.winRate[0] - 0.49)).toBeLessThan(0.04);
-    expect(h.turnsMean).toBeGreaterThan(24);
-    expect(h.turnsMean).toBeLessThan(30);
+    expect(h.turnsMean).toBeGreaterThan(25);
+    expect(h.turnsMean).toBeLessThan(33);
   });
 });

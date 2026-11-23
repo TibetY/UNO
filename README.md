@@ -74,7 +74,8 @@ python -m unittest
 
 Rule variants are flags on every command: `--hand-size`, `--draw-until-playable`,
 `--no-play-drawn`, `--wd4-restricted`, `--no-challenge`, `--multi-play`, `--stack-draws`,
-`--number-finish`, `--house` and `--max-turns`.
+`--number-finish`, `--custom-cards`, `--custom-draw`, `--custom-skip`,
+`--custom-no-color`, `--rules og|c-house`, `--house` and `--max-turns`.
 
 ## Rules implemented (official 2-player rules)
 
@@ -88,11 +89,19 @@ Rule variants are flags on every command: `--hand-size`, `--draw-until-playable`
 - Scoring: number cards are worth their face value, action cards 20 and wilds 50. The winner scores the points left in the loser's hand.
 - Not modeled: the penalty for forgetting to announce your last card (bots always announce it).
 
-**House rules** (on by default in the web app; on the command line, use `--multi-play`, `--stack-draws`, `--number-finish`, or `--house` for all three):
+**Rule sets.** There are two:
+
+- **C House Rules**: the default in the web app. It turns on everything below, with 2 custom cards.
+- **OG**: the official rules, as above. This is the default on the command line.
+
+In the web app, pick a set under **Rules**. Changing any option shows "Custom". On the command line, use `--rules og` or `--rules c-house`. You can also turn on single rules with the flags below.
+
+**House rules:**
 
 - **Multi-play**: after playing a card, you can add more cards of the same number or symbol, in any color, in the same turn. The last card sets the color. Draw cards add up, so two +2s make the opponent draw 4. In the web app, tap the cards in the order you want them played (they rise, numbered), then press **Play**. The first card has to match the pile.
 - **Skip and Reverse** (official two-player rule): you go again at once, so any card matching it can follow (red Skip, then red 8). If nothing matches, you have to draw.
 - **Stacking**: when you're hit with a +2, you can answer with a +2, and when you're hit with a +4, with a +4 (never a +4 on a +2, or the other way round). The total passes to the other player, and whoever can't or won't stack draws all of it.
+- **Custom card** (`--custom-cards N`): a card with a black border and a blank white face. You set what it does before the game starts: the opponent picks up N cards (`--custom-draw`, default 10), the player chooses the color (on by default; `--custom-no-color` turns it off), and/or the player goes again (`--custom-skip`). It can be played on anything. If it doesn't choose a color, the color stays as it was. A custom card that makes the opponent pick up can only be stacked on another custom card. It's worth 50 points, and it's an action card, so you can't go out on it.
 - **Finish on a number** (`--number-finish`): you can only go out on a number card. An action card (Skip, Reverse, +2, +4 or a wild) can't be your last card; if it's all you have left, you draw. A +4 played as a stack can't be challenged. A +4 that starts a penalty can still be challenged: if the challenge succeeds, the player who played it draws the whole total; if it fails, the challenger draws the total plus 2.
 
 ## Writing your own bot

@@ -61,11 +61,14 @@ class GreedyAgent(Agent):
             return next(a for a in legal if a.type is ActionType.ACCEPT)
         if not plays:
             return legal[0]  # DRAW, PASS or DONE
-        colored = [a for a in plays if not a.card.rank.is_wild]
+        colored = [a for a in plays if not a.card.rank.is_colorless]
         if colored:
             return max(colored, key=lambda a: a.card.points)
         color = _best_color([c for c in obs.hand if c != plays[0].card], self.rng)
-        wild = min(plays, key=lambda a: a.card.rank is Rank.WILD_DRAW_FOUR)  # prefer plain wild
+        order = {Rank.WILD: 0, Rank.CUSTOM: 1, Rank.WILD_DRAW_FOUR: 2}  # prefer the plain wild
+        wild = min(plays, key=lambda a: order[a.card.rank])
+        if wild.color is None:  # a custom card that doesn't pick a color
+            return wild
         return next(a for a in plays if a.card == wild.card and a.color == color)
 
 
@@ -121,7 +124,7 @@ class HeuristicAgent(Agent):
             stack = next((a for a in plays if a.card.rank is not Rank.WILD_DRAW_FOUR), None) \
                 or next(iter(plays), None)
             if stack is not None:
-                if not stack.card.rank.is_wild:
+                if stack.color is None:
                     return stack
                 col = self._choose_color(obs, stack.card)
                 return next(a for a in plays if a.card == stack.card and a.color == col)
@@ -133,10 +136,12 @@ class HeuristicAgent(Agent):
             if not plays:
                 return next(a for a in legal if a.type is ActionType.DONE)
             nxt = plays[0]
-            if not nxt.card.rank.is_wild:
+            if not nxt.card.rank.is_colorless:
                 return nxt
             if len(obs.hand) > 3 and obs.opponent_hand_size > 2:
                 return next(a for a in legal if a.type is ActionType.DONE)
+            if nxt.color is None:
+                return nxt
             col = self._choose_color(obs, nxt.card)
             return next(a for a in plays if a.card == nxt.card and a.color == col)
         if not plays:
@@ -157,6 +162,9 @@ class HeuristicAgent(Agent):
                 v = -30.0 + (60 if opp_low else 0)
             elif c.rank is Rank.WILD:
                 v = -20.0 + (10 if opp_low else 0)
+            elif c.rank is Rank.CUSTOM:
+                # Hold it like a wild; a big pick-up is a finisher when they're low.
+                v = -20.0 + ((40 if obs.rules.custom_draw > 0 else 10) if opp_low else 0)
             else:
                 v += color_counts.get(c.color, 0) * 3  # stay in our strong color
                 v += c.points * 0.1                   # dump high cards
@@ -180,10 +188,10 @@ class HeuristicAgent(Agent):
             return next(a for a in legal if a.type is ActionType.DRAW)
         # When the only option is a wild and the hand is still big, drawing first
         # keeps the wild for later.
-        if (obs.phase is Phase.TURN and best.card.rank.is_wild
+        if (obs.phase is Phase.TURN and best.card.rank.is_colorless
                 and len(hand) > 4 and not opp_low):
             return next(a for a in legal if a.type is ActionType.DRAW)
-        if best.card.rank.is_wild:
+        if best.card.rank.is_colorless and best.color is not None:
             col = self._choose_color(obs, best.card)
             return next(a for a in plays if a.card == best.card and a.color == col)
         return best

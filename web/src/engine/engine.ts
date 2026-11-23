@@ -14,6 +14,9 @@
  *    card can follow.)
  *  - stackDraws: when hit by a +2 you may answer with a +2, and when hit by a
  *    +4 with a +4; the total passes to the other player.
+ *  - customCards: adds blank custom cards to the deck. What they do is set by
+ *    customColor (choose a color), customSkip (the player goes again) and
+ *    customDraw (the opponent draws N; stacks only on another custom card).
  *  - numberFinish: you can only go out on a number card. An action card
  *    (Skip, Reverse, +2, wilds) can't be your last card.
  */
@@ -42,6 +45,14 @@ export interface Rules {
   multiPlay: boolean;
   stackDraws: boolean;
   numberFinish: boolean;
+  /** Blank custom cards in the deck. */
+  customCards: number;
+  /** Custom card: the player picks the color. */
+  customColor: boolean;
+  /** Custom card: the player goes again. */
+  customSkip: boolean;
+  /** Custom card: the opponent draws this many (0 = none). */
+  customDraw: number;
   maxTurns: number;
 }
 
@@ -54,11 +65,19 @@ export const DEFAULT_RULES: Rules = {
   multiPlay: false,
   stackDraws: false,
   numberFinish: false,
+  customCards: 0,
+  customColor: true,
+  customSkip: false,
+  customDraw: 10,
   maxTurns: 1000,
 };
 
 /** The house rules this app plays by default. */
-export const HOUSE_RULES: Rules = { ...DEFAULT_RULES, multiPlay: true, stackDraws: true, numberFinish: true };
+/** "OG": the official rules. */
+export const OG_RULES: Rules = DEFAULT_RULES;
+
+/** "C House Rules": everything this app adds, switched on. */
+export const HOUSE_RULES: Rules = { ...DEFAULT_RULES, multiPlay: true, stackDraws: true, numberFinish: true, customCards: 2 };
 
 export interface GameEvent {
   t: number;
@@ -166,7 +185,7 @@ export class Game {
     this.current = this.starter;
     this.rules = { ...DEFAULT_RULES, ...opts.rules };
     this.rng = new Rng(opts.seed);
-    this.drawPile = this.rng.shuffle(buildDeck());
+    this.drawPile = this.rng.shuffle(buildDeck(this.rules.customCards));
     this.deal();
   }
 
@@ -180,7 +199,7 @@ export class Game {
     let card: CardId;
     for (;;) {
       card = this.drawPile.pop()!;
-      if (card !== "wild4") break;
+      if (card !== "wild4" && card !== "custom") break;
       this.drawPile.push(card);
       this.rng.shuffle(this.drawPile);
     }
@@ -262,8 +281,13 @@ export class Game {
     return true;
   }
 
+  private picksColor(card: CardId): boolean {
+    const rank = parseCard(card).rank;
+    return isWild(rank) || (rank === "custom" && this.rules.customColor);
+  }
+
   private playActions(card: CardId): Action[] {
-    return isWild(parseCard(card).rank)
+    return this.picksColor(card)
       ? COLORS.map((color) => ({ type: "play", card, color }) as Action)
       : [{ type: "play", card }];
   }
@@ -384,7 +408,8 @@ export class Game {
     } else this.stats.extraCards[p]++;
     this.hands[p].splice(this.hands[p].indexOf(card), 1);
     this.discard.push(card);
-    this.color = isWild(rank) ? chosen! : color;
+    if (this.picksColor(card)) this.color = chosen!;
+    else if (rank !== "custom") this.color = color; // a custom card without color choice keeps the color
     this.stats.cardsPlayed[p]++;
     const byRank = this.stats.playedByRank[p];
     byRank[rank] = (byRank[rank] ?? 0) + 1;
@@ -409,8 +434,9 @@ export class Game {
     const n = this.batchCount;
     this.batchRank = null;
     const opp = 1 - p;
-    if (rank === "draw2" || rank === "wild4") {
-      this.pendingDraw += (rank === "draw2" ? 2 : 4) * n;
+    const perCard = rank === "draw2" ? 2 : rank === "wild4" ? 4 : rank === "custom" ? this.rules.customDraw : 0;
+    if (perCard > 0) {
+      this.pendingDraw += perCard * n;
       this.offender = p;
       if (won) {
         this.drawN(opp, this.pendingDraw);
@@ -430,7 +456,8 @@ export class Game {
       return this.endTurn(p);
     }
     if (won) return this.finish(p, "out_of_cards");
-    this.endTurn(rank === "skip" || rank === "reverse" ? p : opp);
+    const goesAgain = rank === "skip" || rank === "reverse" || (rank === "custom" && this.rules.customSkip);
+    this.endTurn(goesAgain ? p : opp);
   }
 
   private resolveResponse(victim: number, challenge: boolean) {
