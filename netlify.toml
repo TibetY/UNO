@@ -1,0 +1,8 @@
+# Netlify: build the React app in web/ and serve its output.
+[build]
+  base = "web"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
