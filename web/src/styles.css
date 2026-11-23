@@ -32,6 +32,9 @@
 }
 
 * { box-sizing: border-box; }
+/* Hide the badge Netlify's host script adds. It sits in its own iframe, so its
+   inner .nl-wrap can't be styled from here; hide the iframe instead. */
+#nl-badge-frame { display: none !important; }
 html, body { margin: 0; min-height: 100%; }
 body { background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 14px; }
 [hidden] { display: none !important; }
