@@ -25,6 +25,8 @@ def _rules(args) -> Rules:
         draw_until_playable=args.draw_until_playable,
         wd4_restricted=args.wd4_restricted,
         allow_wd4_challenge=not args.no_challenge,
+        multi_play=args.multi_play or args.house,
+        stack_draws=args.stack_draws or args.house,
         max_turns=args.max_turns,
     )
 
@@ -121,8 +123,8 @@ class HumanAgent(Agent):
         print("Your hand:", " ".join(c.short() for c in sorted(obs.hand)))
         if obs.phase is Phase.DREW:
             print(f"You drew {obs.pending_card}.")
-        if obs.phase is Phase.CHALLENGE:
-            print("Opponent played Wild Draw Four.")
+        if obs.phase is Phase.RESPOND:
+            print(f"You owe {obs.pending_draw} cards: stack a draw card, or accept.")
         for i, a in enumerate(legal):
             print(f"  [{i}] {a}")
         while True:
@@ -167,6 +169,11 @@ def main(argv=None) -> None:
                        help="forbid Wild Draw Four when holding the active color")
         g.add_argument("--no-challenge", action="store_true",
                        help="disable Wild Draw Four challenges")
+        g.add_argument("--multi-play", action="store_true",
+                       help="house rule: play several cards of the same rank in one turn")
+        g.add_argument("--stack-draws", action="store_true",
+                       help="house rule: stack +2/+4 cards to pass the penalty on")
+        g.add_argument("--house", action="store_true", help="both house rules")
         g.add_argument("--max-turns", type=int, default=1000)
 
     choices = sorted(AGENTS)

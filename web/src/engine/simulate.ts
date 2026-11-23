@@ -62,7 +62,7 @@ export interface Summary {
   turnsMedian: number;
   turnsMax: number;
   pointsPerWin: [number, number];
-  perGame: Record<"cardsDrawn" | "cardsPlayed" | "challenges" | "challengesWon" | "wd4Illegal", [number, number]>;
+  perGame: Record<"cardsDrawn" | "cardsPlayed" | "challenges" | "challengesWon" | "wd4Illegal" | "stacks" | "extraCards", [number, number]>;
   reshuffles: number;
   byRank: [Record<string, number>, Record<string, number>];
   turnHistogram: { bucket: number; counts: [number, number][] };
@@ -111,6 +111,8 @@ export function summarize(rs: GameResult[]): Summary {
       challenges: per("challenges"),
       challengesWon: per("challengesWon"),
       wd4Illegal: per("wd4Illegal"),
+      stacks: per("stacks"),
+      extraCards: per("extraCards"),
     },
     reshuffles: rs.reduce((s, r) => s + r.reshuffles, 0) / n,
     byRank,

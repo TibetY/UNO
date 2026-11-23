@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildDeck, points } from "./cards";
-import { type Action, Game, type Rules } from "./engine";
+import { type Action, Game, HOUSE_RULES, type Rules } from "./engine";
 import { AGENTS } from "./agents";
 import { playGame, runMatch, summarize } from "./simulate";
 
@@ -75,7 +75,7 @@ describe("rules", () => {
   it("wild draw four: accept, failed challenge, successful challenge", () => {
     let g = setup(["wild4", "blue:1"], ["green:1"], "red:5");
     g.step(play("wild4", "blue"));
-    expect(g.phase).toBe("challenge");
+    expect(g.phase).toBe("respond");
     g.step({ type: "accept" });
     expect([g.hands[1].length, g.current]).toEqual([5, 0]);
 
@@ -107,6 +107,73 @@ describe("rules", () => {
   });
 });
 
+describe("house rules", () => {
+  const house = { multiPlay: true, stackDraws: true };
+  it("multi-play: same number in different colors, last card sets the color", () => {
+    const g = setup(["red:5", "blue:5", "green:5", "yellow:1"], ["red:1"], "red:2", { rules: house });
+    g.step(play("red:5"));
+    expect(g.phase).toBe("multi");
+    expect(g.current).toBe(0);
+    expect(g.legalActions()).toEqual([play("blue:5"), play("green:5"), { type: "done" }]);
+    g.step(play("green:5"));
+    g.step(play("blue:5"));
+    // No 5s left, so the turn ends by itself.
+    expect([g.current, g.color, g.hands[0]]).toEqual([1, "blue", ["yellow:1"]]);
+    expect(g.stats.extraCards[0]).toBe(2);
+  });
+  it("multi-play: stop early with done", () => {
+    const g = setup(["red:5", "blue:5", "yellow:1"], ["red:1"], "red:2", { rules: house });
+    g.step(play("red:5"));
+    g.step({ type: "done" });
+    expect([g.current, g.hands[0].length]).toEqual([1, 2]);
+  });
+  it("two +2s at once make the opponent draw 4", () => {
+    const g = setup(["red:draw2", "blue:draw2", "yellow:1"], ["green:1"], "red:2", { rules: { multiPlay: true } });
+    g.step(play("red:draw2"));
+    g.step(play("blue:draw2"));
+    expect([g.hands[1].length, g.current]).toEqual([5, 0]);
+  });
+  it("stacking +2 on +2 passes the total back", () => {
+    const g = setup(["red:draw2", "yellow:1"], ["blue:draw2", "green:1"], "red:2", { rules: house });
+    g.step(play("red:draw2"));
+    expect([g.phase, g.current, g.pendingDraw]).toEqual(["respond", 1, 2]);
+    expect(g.legalActions()).toEqual([{ type: "accept" }, play("blue:draw2")]);
+    g.step(play("blue:draw2"));
+    // Player 0 has no draw card, so they draw 4 and player 1 goes again.
+    expect([g.hands[0].length, g.current, g.pendingDraw]).toEqual([5, 1, 0]);
+  });
+  it("+4 can be stacked on +2 (choosing a color); +2 can't go on +4", () => {
+    const g = setup(["red:draw2", "blue:draw2", "yellow:1"], ["wild4", "green:1"], "red:2", { rules: house });
+    g.step(play("red:draw2"));
+    g.step({ type: "done" });
+    g.step(play("wild4", "green"));
+    // A stacked +4 can't be challenged and a +2 can't answer a +4, so with no
+    // choice to make player 0 draws all 6 at once and player 1 goes again.
+    expect([g.hands[0].length, g.current, g.pendingDraw, g.color]).toEqual([8, 1, 0, "green"]);
+  });
+  it("a challengeable +4 can be answered by challenge, accept or a stack", () => {
+    const g = setup(["wild4", "red:1"], ["wild4", "green:1"], "red:5", { rules: house });
+    g.step(play("wild4", "blue"));
+    const keys = g.legalActions().map((a) => a.type + ("color" in a ? a.color : ""));
+    expect(keys).toEqual(["challenge", "accept", "playred", "playyellow", "playgreen", "playblue"]);
+    g.step({ type: "challenge" });
+    // Player 0 held red, so the bluff is caught: they draw the 4.
+    expect([g.hands[0].length, g.current]).toEqual([5, 1]);
+  });
+  it("going out on a +2 still makes the opponent draw", () => {
+    const g = setup(["red:draw2"], ["blue:draw2", "green:1"], "red:5", { rules: house, draw: ["yellow:9", "yellow:8"] });
+    g.step(play("red:draw2"));
+    expect([g.winner, g.hands[1].length]).toEqual([0, 4]);
+  });
+  it("bots finish games and conserve cards under house rules", () => {
+    for (let s = 0; s < 200; s++) {
+      const g = playGame([AGENTS.heuristic(), AGENTS.random()], s, s % 2, house);
+      expect(g.isOver).toBe(true);
+      expect(all(g)).toEqual(buildDeck().sort());
+    }
+  });
+});
+
 describe("simulation", () => {
   it("conserves cards and always finishes", () => {
     for (let s = 0; s < 200; s++) {
@@ -130,5 +197,10 @@ describe("simulation", () => {
     expect(Math.abs(g.winRate[0] - 0.5)).toBeLessThan(0.04);
     expect(g.turnsMean).toBeGreaterThan(28);
     expect(g.turnsMean).toBeLessThan(36);
+    // Python with both house rules: heuristic vs greedy ~49%, ~22 turns.
+    const h = summarize(await runMatch({ p0: "heuristic", p1: "greedy", games: 3000, seed: 3, rules: HOUSE_RULES }));
+    expect(Math.abs(h.winRate[0] - 0.5)).toBeLessThan(0.04);
+    expect(h.turnsMean).toBeGreaterThan(20);
+    expect(h.turnsMean).toBeLessThan(25);
   });
 });

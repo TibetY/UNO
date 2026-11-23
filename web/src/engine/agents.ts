@@ -44,8 +44,8 @@ export class RandomAgent extends BaseAgent {
 export class GreedyAgent extends BaseAgent {
   readonly name = "greedy";
   act(obs: Observation, legal: Action[]): Action {
-    if (obs.phase === "challenge") return find(legal, "accept");
     const ps = plays(legal);
+    if (obs.phase === "respond" && !ps.length) return find(legal, "accept");
     if (!ps.length) return legal[0];
     const colored = ps.filter((a) => !isWild(parseCard(a.card).rank));
     if (colored.length) return colored.reduce((b, a) => (points(a.card) > points(b.card) ? a : b));
@@ -111,10 +111,29 @@ export class HeuristicAgent extends BaseAgent {
   }
 
   act(obs: Observation, legal: Action[]): Action {
-    if (obs.phase === "challenge") return this.challenge(obs, legal);
     const ps = plays(legal);
+    if (obs.phase === "respond") {
+      // Stacking passes the penalty on: always worth it. Prefer a +2 over a +4.
+      const stack = ps.find((a) => a.card !== "wild4") ?? ps.find((a) => a.card === "wild4");
+      if (stack) {
+        if (stack.card !== "wild4") return stack;
+        const col = this.chooseColor(obs, "wild4");
+        return ps.find((a) => a.card === "wild4" && a.color === col)!;
+      }
+      return legal.some((a) => a.type === "challenge") ? this.challenge(obs, legal) : find(legal, "accept");
+    }
+    if (obs.phase === "multi") {
+      // Dump extra copies, but keep spare wilds unless we're close to going out.
+      const next = ps[0];
+      if (!next) return find(legal, "done");
+      if (!isWild(parseCard(next.card).rank)) return next;
+      if (obs.hand.length > 3 && obs.opponentHandSize > 2) return find(legal, "done");
+      const col = this.chooseColor(obs, next.card);
+      return ps.find((a) => a.card === next.card && a.color === col)!;
+    }
     if (!ps.length) return legal[0];
     const hand = obs.hand;
+    const multi = obs.rules.multiPlay;
     const counts = colorCounts(hand);
     const oppLow = obs.opponentHandSize <= 2;
     const hasCurrent = obs.color !== null && (counts.get(obs.color) ?? 0) > 0;
@@ -125,6 +144,8 @@ export class HeuristicAgent extends BaseAgent {
       if (rank === "wild4") return hasCurrent ? -100 : -30 + (oppLow ? 60 : 0);
       if (rank === "wild") return -20 + (oppLow ? 10 : 0);
       let v = (counts.get(color!) ?? 0) * 3 + points(card) * 0.1;
+      // With multi-play, a rank we hold several of empties the hand faster.
+      if (multi) v += (hand.filter((h) => parseCard(h).rank === rank).length - 1) * 4;
       if (rank.length > 1) {
         const follow = hand.some((h) => h !== card && (parseCard(h).color === color || isWild(parseCard(h).rank)));
         v += 4 + (oppLow ? 15 : 0) + (follow ? 3 : -2);

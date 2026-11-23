@@ -6,16 +6,26 @@
  *
  * Two-player specifics: Reverse acts like Skip, and Skip / Reverse / Draw Two /
  * Wild Draw Four all give the player who played them another turn.
+ *
+ * House rules (off by default):
+ *  - multiPlay: after playing a card you may add more cards of the same rank
+ *    (any color) in the same turn. Draw cards add up: two +2s = draw 4.
+ *  - stackDraws: when hit by a +2 you may answer with a +2 or +4, and when hit
+ *    by a +4 you may answer with a +4; the total passes to the other player.
  */
 import { COLORS, type CardId, type Color, buildDeck, isWild, matches, parseCard, points } from "./cards";
 import { Rng } from "./rng";
 
-export type Phase = "turn" | "drew" | "challenge" | "over";
+/** turn: play or draw · drew: play the drawn card or keep it · multi: add more
+ *  cards of the same rank or finish · respond: hit by a draw card, so accept,
+ *  stack or challenge · over */
+export type Phase = "turn" | "drew" | "multi" | "respond" | "over";
 
 export type Action =
   | { type: "play"; card: CardId; color?: Color }
   | { type: "draw" }
   | { type: "pass" }
+  | { type: "done" }
   | { type: "challenge" }
   | { type: "accept" };
 
@@ -25,6 +35,8 @@ export interface Rules {
   drawUntilPlayable: boolean;
   wd4Restricted: boolean;
   allowWd4Challenge: boolean;
+  multiPlay: boolean;
+  stackDraws: boolean;
   maxTurns: number;
 }
 
@@ -34,8 +46,13 @@ export const DEFAULT_RULES: Rules = {
   drawUntilPlayable: false,
   wd4Restricted: false,
   allowWd4Challenge: true,
+  multiPlay: false,
+  stackDraws: false,
   maxTurns: 1000,
 };
+
+/** The house rules this app plays by default. */
+export const HOUSE_RULES: Rules = { ...DEFAULT_RULES, multiPlay: true, stackDraws: true };
 
 export interface GameEvent {
   t: number;
@@ -59,8 +76,11 @@ export interface Observation {
   opponentHandSize: number;
   drawPileSize: number;
   pending: CardId | null;
+  /** Cards the player to act must draw unless they stack (phase "respond"). */
+  pendingDraw: number;
   turn: number;
   history: readonly GameEvent[];
+  rules: Rules;
 }
 
 export interface GameResult {
@@ -78,6 +98,8 @@ export interface GameResult {
   challenges: number[];
   challengesWon: number[];
   wd4Illegal: number[];
+  stacks: number[];
+  extraCards: number[];
   reshuffles: number;
 }
 
@@ -115,10 +137,20 @@ export class Game {
     challenges: [0, 0],
     challengesWon: [0, 0],
     wd4Illegal: [0, 0],
+    stacks: [0, 0],
+    extraCards: [0, 0],
     reshuffles: 0,
   };
-  private wd4Offender: number | null = null;
+  /** Cards owed by the player to act (phase "respond"). */
+  pendingDraw = 0;
+  private offender: number | null = null;
+  private canChallenge = false;
   private wd4WasIllegal = false;
+  // The batch of same-rank cards being played this turn.
+  private batchRank: string | null = null;
+  private batchCount = 0;
+  private batchIsResponse = false;
+  private batchIllegalWd4 = false;
 
   constructor(opts: { seed: number; starter?: number; rules?: Partial<Rules> }) {
     this.seed = opts.seed;
@@ -231,7 +263,19 @@ export class Game {
   // ------------------------------------------------------------ public API
   legalActions(): Action[] {
     if (this.phase === "over") return [];
-    if (this.phase === "challenge") return [{ type: "challenge" }, { type: "accept" }];
+    if (this.phase === "respond") {
+      const out: Action[] = this.canChallenge ? [{ type: "challenge" }, { type: "accept" }] : [{ type: "accept" }];
+      for (const card of this.stackable(this.current)) out.push(...this.playActions(card));
+      return out;
+    }
+    if (this.phase === "multi") {
+      const out: Action[] = [];
+      for (const card of [...new Set(this.hands[this.current])].sort()) {
+        if (parseCard(card).rank === this.batchRank) out.push(...this.playActions(card));
+      }
+      out.push({ type: "done" });
+      return out;
+    }
     if (this.phase === "drew") return [...this.playActions(this.pending!), { type: "pass" }];
     const out: Action[] = [];
     for (const card of [...new Set(this.hands[this.current])].sort()) {
@@ -251,8 +295,10 @@ export class Game {
       opponentHandSize: this.hands[1 - p].length,
       drawPileSize: this.drawPile.length,
       pending: p === this.current ? this.pending : null,
+      pendingDraw: p === this.current ? this.pendingDraw : 0,
       turn: this.turn,
       history: this.events,
+      rules: this.rules,
     };
   }
 
@@ -263,7 +309,6 @@ export class Game {
       throw new IllegalAction(`illegal action ${key} in phase ${this.phase}`);
     }
     const p = this.current;
-    if (this.phase === "challenge") return this.resolveChallenge(p, action.type === "challenge");
     switch (action.type) {
       case "play":
         return this.play(p, action.card, action.color);
@@ -272,7 +317,19 @@ export class Game {
       case "pass":
         this.log("pass", p, {});
         return this.endTurn(1 - p);
+      case "done":
+        return this.resolveBatch(p, false);
+      case "accept":
+      case "challenge":
+        return this.resolveResponse(p, action.type === "challenge");
     }
+  }
+
+  /** Draw cards `p` may stack on the pending penalty. */
+  private stackable(p: number): CardId[] {
+    if (!this.rules.stackDraws) return [];
+    const topRank = parseCard(this.top).rank;
+    return [...new Set(this.hands[p])].sort().filter((c) => c === "wild4" || (c.endsWith(":draw2") && topRank === "draw2"));
   }
 
   // ------------------------------------------------------------ mechanics
@@ -296,45 +353,71 @@ export class Game {
 
   private play(p: number, card: CardId, chosen?: Color) {
     const { rank, color } = parseCard(card);
-    const illegalWd4 = rank === "wild4" && this.hasColor(p);
+    if (this.phase !== "multi") {
+      // First card of this turn's batch.
+      this.batchIsResponse = this.phase === "respond";
+      this.batchIllegalWd4 = rank === "wild4" && !this.batchIsResponse && this.hasColor(p);
+      this.batchRank = rank;
+      this.batchCount = 0;
+      if (this.batchIsResponse) this.stats.stacks[p]++;
+      if (this.batchIllegalWd4) this.stats.wd4Illegal[p]++;
+    } else this.stats.extraCards[p]++;
     this.hands[p].splice(this.hands[p].indexOf(card), 1);
     this.discard.push(card);
     this.color = isWild(rank) ? chosen! : color;
     this.stats.cardsPlayed[p]++;
     const byRank = this.stats.playedByRank[p];
     byRank[rank] = (byRank[rank] ?? 0) + 1;
-    if (illegalWd4) this.stats.wd4Illegal[p]++;
+    this.batchCount++;
     this.log("play", p, { card, color: this.color });
 
-    const opp = 1 - p;
     const won = this.hands[p].length === 0;
-    let next = opp;
-    if (rank === "skip" || rank === "reverse") next = p;
-    else if (rank === "draw2") {
-      this.drawN(opp, 2);
-      next = p;
-    } else if (rank === "wild4") {
-      if (this.rules.allowWd4Challenge && !won) {
-        this.wd4Offender = p;
-        this.wd4WasIllegal = illegalWd4;
+    if (!won && this.rules.multiPlay && this.hands[p].some((c) => parseCard(c).rank === rank)) {
+      this.phase = "multi";
+      this.pending = null;
+      return;
+    }
+    this.resolveBatch(p, won);
+  }
+
+  /** Apply the effect of the cards played this turn. */
+  private resolveBatch(p: number, won: boolean) {
+    const rank = this.batchRank!;
+    const n = this.batchCount;
+    this.batchRank = null;
+    const opp = 1 - p;
+    if (rank === "draw2" || rank === "wild4") {
+      this.pendingDraw += (rank === "draw2" ? 2 : 4) * n;
+      this.offender = p;
+      if (won) {
+        this.drawN(opp, this.pendingDraw);
+        this.pendingDraw = 0;
+        return this.finish(p, "out_of_cards");
+      }
+      this.canChallenge = rank === "wild4" && this.rules.allowWd4Challenge && !this.batchIsResponse;
+      this.wd4WasIllegal = this.batchIllegalWd4;
+      if (this.canChallenge || this.stackable(opp).length) {
         this.current = opp;
-        this.phase = "challenge";
+        this.phase = "respond";
         this.pending = null;
         return;
       }
-      this.drawN(opp, 4);
-      next = p;
+      this.drawN(opp, this.pendingDraw);
+      this.pendingDraw = 0;
+      return this.endTurn(p);
     }
-    if (won) this.finish(p, "out_of_cards");
-    else this.endTurn(next);
+    if (won) return this.finish(p, "out_of_cards");
+    this.endTurn(rank === "skip" || rank === "reverse" ? p : opp);
   }
 
-  private resolveChallenge(victim: number, challenge: boolean) {
-    const offender = this.wd4Offender!;
-    this.wd4Offender = null;
+  private resolveResponse(victim: number, challenge: boolean) {
+    const offender = this.offender!;
+    const owed = this.pendingDraw;
+    this.pendingDraw = 0;
+    this.offender = null;
     if (!challenge) {
       this.log("accept", victim, {});
-      this.drawN(victim, 4);
+      this.drawN(victim, owed);
       return this.endTurn(offender);
     }
     this.stats.challenges[victim]++;
@@ -342,10 +425,10 @@ export class Game {
     this.log("challenge", victim, { success });
     if (success) {
       this.stats.challengesWon[victim]++;
-      this.drawN(offender, 4);
+      this.drawN(offender, owed);
       this.endTurn(victim);
     } else {
-      this.drawN(victim, 6);
+      this.drawN(victim, owed + 2);
       this.endTurn(offender);
     }
   }
@@ -373,6 +456,8 @@ export class Game {
       challenges: [...s.challenges],
       challengesWon: [...s.challengesWon],
       wd4Illegal: [...s.wd4Illegal],
+      stacks: [...s.stacks],
+      extraCards: [...s.extraCards],
       reshuffles: s.reshuffles,
     };
   }

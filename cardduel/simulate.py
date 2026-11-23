@@ -108,7 +108,7 @@ def summarize(results: Iterable[Dict]) -> Dict:
         "points_total": [sum(r["points"] for r in results if r["winner"] == p) for p in (0, 1)],
     }
     for key in ("cards_drawn", "cards_played", "draw_actions", "challenges",
-                "challenges_won", "wd4_illegal"):
+                "challenges_won", "wd4_illegal", "stacks", "extra_cards"):
         summary[f"{key}_per_game"] = [sum(r[key][p] for r in results) / n for p in (0, 1)]
     summary["reshuffles_per_game"] = sum(r["reshuffles"] for r in results) / n
     by_rank = [Counter(), Counter()]
@@ -140,6 +140,8 @@ def format_summary(s: Dict) -> str:
         f"Challenges/game:     {s['challenges_per_game'][0]:.3f} vs {s['challenges_per_game'][1]:.3f}"
         f"  (won {s['challenges_won_per_game'][0]:.3f} vs {s['challenges_won_per_game'][1]:.3f})",
         f"Illegal WD4/game:    {s['wd4_illegal_per_game'][0]:.3f} vs {s['wd4_illegal_per_game'][1]:.3f}",
+        f"Stacks/game:         {s['stacks_per_game'][0]:.3f} vs {s['stacks_per_game'][1]:.3f}",
+        f"Extra cards/game:    {s['extra_cards_per_game'][0]:.3f} vs {s['extra_cards_per_game'][1]:.3f}",
         f"Reshuffles/game:     {s['reshuffles_per_game']:.3f}",
     ]
     return "\n".join(lines)

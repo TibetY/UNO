@@ -17,6 +17,8 @@ export interface TableView {
   phase: Phase;
   current: number;
   pending: CardId | null;
+  /** Cards owed by the player to act (phase "respond"). */
+  pendingDraw: number;
   legal: Action[];
   winner: number | null;
   endReason: string | null;
@@ -44,6 +46,7 @@ export function viewFromGame(
     phase: g.phase,
     current: g.current,
     pending: yourTurn || reveal ? g.pending : null,
+    pendingDraw: g.pendingDraw,
     legal: yourTurn ? g.legalActions() : [],
     winner: g.winner,
     endReason: g.endReason,
@@ -61,7 +64,7 @@ export interface WireView extends Omit<TableView, "legal"> {
 }
 
 export function decodeAction(key: string): Action {
-  if (!key.startsWith("play:")) return { type: key as "draw" | "pass" | "challenge" | "accept" };
+  if (!key.startsWith("play:")) return { type: key as "draw" | "pass" | "done" | "challenge" | "accept" };
   const [card, color] = key.slice(5).split(">");
   return color ? { type: "play", card, color: color as Color } : { type: "play", card };
 }

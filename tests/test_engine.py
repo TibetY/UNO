@@ -3,7 +3,7 @@ from collections import Counter
 
 from cardduel import (ActionType, Card, Color, Game, IllegalAction, Phase, Rank, Rules,
                       build_deck, make_agent, play_game, run_match, summarize)
-from cardduel.engine import ACCEPT, CHALLENGE, DRAW, PASS, Action
+from cardduel.engine import ACCEPT, CHALLENGE, DONE, DRAW, PASS, Action
 
 R, Y, G, B = Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE
 
@@ -110,7 +110,7 @@ class RuleTests(unittest.TestCase):
     def test_wd4_accept(self):
         g = setup([Card(Rank.WILD_DRAW_FOUR), Card(Rank.ONE, B)], [Card(Rank.ONE, G)], Card(Rank.FIVE, R))
         g.step(Action(ActionType.PLAY, Card(Rank.WILD_DRAW_FOUR), B))
-        self.assertEqual(g.phase, Phase.CHALLENGE)
+        self.assertEqual(g.phase, Phase.RESPOND)
         self.assertEqual(g.current_player, 1)
         g.step(ACCEPT)
         self.assertEqual(len(g.hands[1]), 5)
@@ -152,6 +152,67 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(g.top_card, Card(Rank.FIVE, R))
         self.assertEqual(len(g.hands[0]), 2)
         self.assertEqual(g.stats.reshuffles, 1)
+
+
+HOUSE = Rules(multi_play=True, stack_draws=True)
+
+
+class HouseRuleTests(unittest.TestCase):
+    def test_multi_play_same_number_any_color(self):
+        g = setup([Card(Rank.FIVE, R), Card(Rank.FIVE, B), Card(Rank.FIVE, G), Card(Rank.ONE, Y)],
+                  [Card(Rank.ONE, R)], Card(Rank.TWO, R), rules=HOUSE)
+        g.step(Action(ActionType.PLAY, Card(Rank.FIVE, R)))
+        self.assertEqual((g.phase, g.current_player), (Phase.MULTI, 0))
+        self.assertEqual(g.legal_actions(), [Action(ActionType.PLAY, Card(Rank.FIVE, B)),
+                                             Action(ActionType.PLAY, Card(Rank.FIVE, G)), DONE])
+        g.step(Action(ActionType.PLAY, Card(Rank.FIVE, G)))
+        g.step(Action(ActionType.PLAY, Card(Rank.FIVE, B)))
+        self.assertEqual((g.current_player, g.current_color, g.hands[0]), (1, B, [Card(Rank.ONE, Y)]))
+
+    def test_done_ends_turn_early(self):
+        g = setup([Card(Rank.FIVE, R), Card(Rank.FIVE, B), Card(Rank.ONE, Y)], [Card(Rank.ONE, R)],
+                  Card(Rank.TWO, R), rules=HOUSE)
+        g.step(Action(ActionType.PLAY, Card(Rank.FIVE, R)))
+        g.step(DONE)
+        self.assertEqual((g.current_player, len(g.hands[0])), (1, 2))
+
+    def test_two_draw_twos_at_once(self):
+        g = setup([Card(Rank.DRAW_TWO, R), Card(Rank.DRAW_TWO, B), Card(Rank.ONE, Y)], [Card(Rank.ONE, G)],
+                  Card(Rank.TWO, R), rules=Rules(multi_play=True))
+        g.step(Action(ActionType.PLAY, Card(Rank.DRAW_TWO, R)))
+        g.step(Action(ActionType.PLAY, Card(Rank.DRAW_TWO, B)))
+        self.assertEqual((len(g.hands[1]), g.current_player), (5, 0))
+
+    def test_stack_draw_two(self):
+        g = setup([Card(Rank.DRAW_TWO, R), Card(Rank.ONE, Y)], [Card(Rank.DRAW_TWO, B), Card(Rank.ONE, G)],
+                  Card(Rank.TWO, R), rules=HOUSE)
+        g.step(Action(ActionType.PLAY, Card(Rank.DRAW_TWO, R)))
+        self.assertEqual((g.phase, g.current_player, g.pending_draw), (Phase.RESPOND, 1, 2))
+        self.assertEqual(g.legal_actions(), [ACCEPT, Action(ActionType.PLAY, Card(Rank.DRAW_TWO, B))])
+        g.step(Action(ActionType.PLAY, Card(Rank.DRAW_TWO, B)))
+        self.assertEqual((len(g.hands[0]), g.current_player, g.pending_draw), (5, 1, 0))
+
+    def test_wd4_on_draw_two_and_no_draw_two_on_wd4(self):
+        g = setup([Card(Rank.DRAW_TWO, R), Card(Rank.DRAW_TWO, B), Card(Rank.ONE, Y)],
+                  [Card(Rank.WILD_DRAW_FOUR), Card(Rank.ONE, G)], Card(Rank.TWO, R), rules=HOUSE)
+        g.step(Action(ActionType.PLAY, Card(Rank.DRAW_TWO, R)))
+        g.step(DONE)
+        g.step(Action(ActionType.PLAY, Card(Rank.WILD_DRAW_FOUR), G))
+        self.assertEqual((len(g.hands[0]), g.current_player, g.current_color), (8, 1, G))
+
+    def test_challengeable_wd4_can_be_stacked(self):
+        g = setup([Card(Rank.WILD_DRAW_FOUR), Card(Rank.ONE, R)], [Card(Rank.WILD_DRAW_FOUR), Card(Rank.ONE, G)],
+                  Card(Rank.FIVE, R), rules=HOUSE)
+        g.step(Action(ActionType.PLAY, Card(Rank.WILD_DRAW_FOUR), B))
+        types = [a.type for a in g.legal_actions()]
+        self.assertEqual(types[:2], [ActionType.CHALLENGE, ActionType.ACCEPT])
+        self.assertEqual(types.count(ActionType.PLAY), 4)
+
+    def test_bots_finish_under_house_rules(self):
+        for seed in range(200):
+            g = play_game([make_agent("heuristic"), make_agent("random")], seed=seed, starter=seed % 2, rules=HOUSE)
+            self.assertTrue(g.is_over)
+            self.assertEqual(sorted(all_cards(g)), sorted(build_deck()))
 
 
 class SimulationTests(unittest.TestCase):

@@ -124,6 +124,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .center { display: flex; align-items: center; justify-content: center; gap: 64px; padding: 18px 0; }
 .pile-wrap { display: flex; flex-direction: column; align-items: center; gap: 26px; }
 .pile-label { font-size: 13px; color: rgba(255,255,255,.8); font-weight: 600; }
+.owed { color: var(--accent-hi); font-weight: 800; }
 .deck { background: none; border: 0; padding: 0; position: relative; border-radius: var(--radius); }
 .deck .card { box-shadow: 2px 2px 0 #0c0c10, 4px 4px 0 #2c2c33, 6px 6px 0 #0c0c10, 8px 8px 14px rgba(0,0,0,.4); }
 .deck.can-draw .card { animation: breathe 1.6s ease-in-out infinite; }

@@ -106,6 +106,7 @@ function Results({ s, secs, names }: { s: Summary; secs: number; names: [string,
         {tile("Points per win", `${Math.round(s.pointsPerWin[0])} / ${Math.round(s.pointsPerWin[1])}`, `${names[0]} / ${names[1]}`)}
         {tile("Cards drawn per game", `${num(s.perGame.cardsDrawn[0], 1)} / ${num(s.perGame.cardsDrawn[1], 1)}`, `${names[0]} / ${names[1]}`)}
         {tile("Challenges per game", `${num(s.perGame.challenges[0])} / ${num(s.perGame.challenges[1])}`, `won ${num(s.perGame.challengesWon[0])} / ${num(s.perGame.challengesWon[1])}`)}
+        {tile("Stacked draw cards per game", `${num(s.perGame.stacks[0])} / ${num(s.perGame.stacks[1])}`, `extra same-rank cards ${num(s.perGame.extraCards[0])} / ${num(s.perGame.extraCards[1])}`)}
         {tile("Illegal Wild Draw Fours", `${num(s.perGame.wd4Illegal[0])} / ${num(s.perGame.wd4Illegal[1])}`, `per game · ${num(s.reshuffles, 3)} reshuffles`)}
       </div>
       <div className="panel">

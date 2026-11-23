@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { COLORS, type CardId, type Color, cap, cardLabel, isWild, parseCard, sortHand } from "../engine/cards";
+import { COLORS, type CardId, type Color, cap, cardLabel, isWild, parseCard, rankName, sortHand } from "../engine/cards";
 import type { Action, GameEvent } from "../engine/engine";
 import type { TableView } from "../view";
 import { Card, CardBack } from "./Card";
@@ -54,14 +54,18 @@ export function Table({ view: v, onAction, busy, status, seatExtra, gameOverActi
   const over = v.endReason !== null;
   const draw = find("draw");
   const pass = find("pass");
-  const challenge = yourTurn && v.phase === "challenge";
+  const done = find("done");
+  const accept = find("accept");
+  const challenge = find("challenge");
+  const opp = v.you === null ? "" : v.names[1 - v.you];
 
   let statusText = status;
   if (statusText === undefined) {
     if (over) statusText = "";
     else if (yourTurn) {
       if (v.phase === "drew") statusText = `You drew ${aOrAn(cardLabel(v.pending!))}. Play it or keep it.`;
-      else if (v.phase === "challenge") statusText = `${v.names[1 - v.you!]} played a Wild Draw Four.`;
+      else if (v.phase === "respond") statusText = respondText(v, opp, legalByCard.size > 0, !!challenge);
+      else if (v.phase === "multi") statusText = `Play another ${rankName(parseCard(v.top).rank)}, or end your turn.`;
       else statusText = legalByCard.size ? "Your turn. Pick a card, or draw." : "No playable cards. Draw from the deck.";
     } else statusText = `${playerName(v, v.current)} ${v.you === null ? "to move" : "is thinking…"}`;
   }
@@ -84,13 +88,19 @@ export function Table({ view: v, onAction, busy, status, seatExtra, gameOverActi
         </div>
         <div className="pile-wrap">
           <DiscardPile v={v} />
-          <span className="pile-label">{v.color ? `${cap(v.color)} to play` : "Any color"}</span>
+          <span className="pile-label">
+            {v.color ? `${cap(v.color)} to play` : "Any color"}
+            {v.pendingDraw > 0 && <span className="owed" title="Cards owed by the player to act"> · +{v.pendingDraw}</span>}
+          </span>
         </div>
       </div>
 
       <div className="status" aria-live="polite">{statusText}</div>
       <div className="actionbar">
         {pass && <button className="btn" disabled={busy} onClick={() => act(pass)}>Keep it · end turn</button>}
+        {done && <button className="btn primary" disabled={busy} onClick={() => act(done)}>End turn</button>}
+        {challenge && <button className="btn" disabled={busy} onClick={() => act(challenge)}>Challenge</button>}
+        {accept && <button className="btn primary" disabled={busy} onClick={() => act(accept)}>Draw {v.pendingDraw}</button>}
         {draw && <button className="btn" disabled={busy} onClick={() => act(draw)}>Draw a card</button>}
       </div>
 
@@ -111,23 +121,6 @@ export function Table({ view: v, onAction, busy, status, seatExtra, gameOverActi
         </div>
       )}
 
-      {challenge && (
-        <div className="overlay">
-          <div className="dialog" role="dialog" aria-label="Wild Draw Four">
-            <h2>Wild Draw Four!</h2>
-            <p>
-              Think {v.names[1 - v.you!]} still had a {v.events.length ? prevColor(v.events) ?? "matching" : "matching"} card? Challenge it.
-              <br />
-              <small>Right: they draw 4 and you play on. Wrong: you draw 6 and lose your turn.</small>
-            </p>
-            <div className="row">
-              <button className="btn primary" onClick={() => act(find("challenge")!)}>Challenge</button>
-              <button className="btn" onClick={() => act(find("accept")!)}>Accept · draw 4</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {over && !hideGameOver && <GameOver v={v} actions={gameOverActions} />}
     </div>
   );
@@ -135,6 +128,17 @@ export function Table({ view: v, onAction, busy, status, seatExtra, gameOverActi
 
 function aOrAn(label: string) {
   return (/^[AEIOU]/.test(label) ? "an " : "a ") + label;
+}
+
+function respondText(v: TableView, opp: string, canStack: boolean, canChallenge: boolean): string {
+  const n = v.pendingDraw;
+  const card = parseCard(v.top).rank === "wild4" ? "Wild Draw Four" : "Draw Two";
+  if (canStack) {
+    return `${opp} hit you with +${n}. Stack a draw card to pass it on, or draw ${n}.` +
+      (canChallenge ? ` You can also challenge (if you're wrong you draw ${n + 2}).` : "");
+  }
+  const prev = prevColor(v.events);
+  return `${opp} played a ${card}. Think they still had a ${prev ?? "matching"} card? Challenge it, or draw ${n}. If you're wrong you draw ${n + 2}.`;
 }
 
 function prevColor(events: GameEvent[]): string | null {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { DEFAULT_RULES, type Rules } from "./engine/engine";
+import { HOUSE_RULES, type Rules } from "./engine/engine";
 import { OnlinePage } from "./components/OnlinePage";
 import { PlayPage } from "./components/PlayPage";
 import { SimPage } from "./components/SimPage";
@@ -24,7 +24,7 @@ function readHash(): { view: View; code: string } {
 
 export function App() {
   const [{ view, code }, setRoute] = useState(readHash);
-  const [rules, setRules] = useState<Rules>(() => load("rules", DEFAULT_RULES));
+  const [rules, setRules] = useState<Rules>(() => load("rules", HOUSE_RULES));
   const [provider, setProvider] = useState<RoomProvider | null>(null);
 
   useEffect(() => {
@@ -86,6 +86,8 @@ function RulesPanel({ rules, onChange }: { rules: Rules; onChange: (p: Partial<R
     <details className="panel rules">
       <summary>Rule options <small>apply to new games</small></summary>
       <div className="rules-grid">
+        <label className="check"><input type="checkbox" checked={rules.multiPlay} onChange={(e) => onChange({ multiPlay: e.target.checked })} /> Play several of the same number or symbol in one turn</label>
+        <label className="check"><input type="checkbox" checked={rules.stackDraws} onChange={(e) => onChange({ stackDraws: e.target.checked })} /> Stack +2 and +4 cards to pass the penalty on</label>
         <label className="check"><input type="checkbox" checked={rules.drawUntilPlayable} onChange={(e) => onChange({ drawUntilPlayable: e.target.checked })} /> Draw until you get a playable card</label>
         <label className="check"><input type="checkbox" checked={!rules.playDrawnCard} onChange={(e) => onChange({ playDrawnCard: !e.target.checked })} /> A drawn card can't be played the same turn</label>
         <label className="check"><input type="checkbox" checked={rules.wd4Restricted} onChange={(e) => onChange({ wd4Restricted: e.target.checked })} /> Wild Draw Four only when you can't follow the color</label>

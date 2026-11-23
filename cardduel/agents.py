@@ -56,11 +56,11 @@ class GreedyAgent(Agent):
     name = "greedy"
 
     def act(self, obs, legal):
-        if obs.phase is Phase.CHALLENGE:
-            return next(a for a in legal if a.type is ActionType.ACCEPT)
         plays = [a for a in legal if a.type is ActionType.PLAY]
+        if obs.phase is Phase.RESPOND and not plays:
+            return next(a for a in legal if a.type is ActionType.ACCEPT)
         if not plays:
-            return legal[0]  # DRAW or PASS
+            return legal[0]  # DRAW, PASS or DONE
         colored = [a for a in plays if not a.card.rank.is_wild]
         if colored:
             return max(colored, key=lambda a: a.card.points)
@@ -115,14 +115,35 @@ class HeuristicAgent(Agent):
         return max(COLORS, key=score)
 
     def act(self, obs, legal):
-        if obs.phase is Phase.CHALLENGE:
-            return self._challenge(obs, legal)
-
         plays = [a for a in legal if a.type is ActionType.PLAY]
+        if obs.phase is Phase.RESPOND:
+            # Stacking passes the penalty on: always worth it. Prefer a +2 over a +4.
+            stack = next((a for a in plays if a.card.rank is not Rank.WILD_DRAW_FOUR), None) \
+                or next(iter(plays), None)
+            if stack is not None:
+                if not stack.card.rank.is_wild:
+                    return stack
+                col = self._choose_color(obs, stack.card)
+                return next(a for a in plays if a.card == stack.card and a.color == col)
+            if any(a.type is ActionType.CHALLENGE for a in legal):
+                return self._challenge(obs, legal)
+            return next(a for a in legal if a.type is ActionType.ACCEPT)
+        if obs.phase is Phase.MULTI:
+            # Dump extra copies, but keep spare wilds unless we're close to going out.
+            if not plays:
+                return next(a for a in legal if a.type is ActionType.DONE)
+            nxt = plays[0]
+            if not nxt.card.rank.is_wild:
+                return nxt
+            if len(obs.hand) > 3 and obs.opponent_hand_size > 2:
+                return next(a for a in legal if a.type is ActionType.DONE)
+            col = self._choose_color(obs, nxt.card)
+            return next(a for a in plays if a.card == nxt.card and a.color == col)
         if not plays:
             return legal[0]
 
         hand = list(obs.hand)
+        multi = obs.rules.multi_play
         color_counts = Counter(c.color for c in hand if c.color is not None)
         opp_low = obs.opponent_hand_size <= 2
         has_current = obs.current_color is not None and color_counts.get(obs.current_color, 0) > 0
@@ -139,6 +160,8 @@ class HeuristicAgent(Agent):
             else:
                 v += color_counts.get(c.color, 0) * 3  # stay in our strong color
                 v += c.points * 0.1                   # dump high cards
+                if multi:  # a rank we hold several of empties the hand faster
+                    v += (sum(1 for h in hand if h.rank is c.rank) - 1) * 4
                 if c.rank.is_action:
                     # extra turn: great if we can follow up, essential when opp is low
                     follow = sum(1 for h in hand if h != c and (h.color == c.color or h.rank.is_wild))

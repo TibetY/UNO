@@ -9,6 +9,12 @@ Two-player rule specifics (official rules):
   * Reverse acts like Skip: the player who played it goes again.
   * Skip / Draw Two / Wild Draw Four: the opponent loses their turn, so the
     player who played the card goes again.
+
+House rules (off by default, see ``Rules``):
+  * multi_play: after playing a card you may add more cards of the same rank
+    (any color) in the same turn. Draw cards add up: two +2s = draw 4.
+  * stack_draws: when hit by a +2 you may answer with a +2 or +4, and when hit
+    by a +4 you may answer with a +4; the total passes to the other player.
 """
 from __future__ import annotations
 
@@ -21,9 +27,10 @@ from .cards import COLORS, Card, Color, Rank, build_deck
 
 
 class Phase(str, Enum):
-    TURN = "turn"            # play a card or draw
-    DREW = "drew"            # drew a playable card: play it or pass
-    CHALLENGE = "challenge"  # opponent played Wild Draw Four: challenge or accept
+    TURN = "turn"        # play a card or draw
+    DREW = "drew"        # drew a playable card: play it or pass
+    MULTI = "multi"      # add more cards of the same rank, or finish (multi_play)
+    RESPOND = "respond"  # hit by a draw card: accept, stack, or challenge a Wild Draw Four
     OVER = "over"
 
 
@@ -31,6 +38,7 @@ class ActionType(str, Enum):
     PLAY = "play"
     DRAW = "draw"
     PASS = "pass"
+    DONE = "done"
     CHALLENGE = "challenge"
     ACCEPT = "accept"
 
@@ -52,6 +60,7 @@ class Action:
 
 DRAW = Action(ActionType.DRAW)
 PASS = Action(ActionType.PASS)
+DONE = Action(ActionType.DONE)
 CHALLENGE = Action(ActionType.CHALLENGE)
 ACCEPT = Action(ActionType.ACCEPT)
 
@@ -70,6 +79,9 @@ class Rules:
     # True the engine simply forbids illegal WD4 plays (and challenges are moot).
     wd4_restricted: bool = False
     allow_wd4_challenge: bool = True
+    # House rules.
+    multi_play: bool = False
+    stack_draws: bool = False
     # Safety valve against (extremely rare) endless games.
     max_turns: int = 1000
 
@@ -87,8 +99,10 @@ class Observation:
     draw_pile_size: int
     discard_pile: Tuple[Card, ...]
     pending_card: Optional[Card]   # card just drawn (Phase.DREW)
+    pending_draw: int              # cards owed unless stacked (Phase.RESPOND)
     turn: int
     history: Tuple[Dict[str, Any], ...]  # public event log (no hidden info)
+    rules: "Rules"
 
 
 @dataclass
@@ -101,6 +115,8 @@ class GameStats:
     challenges: List[int] = field(default_factory=lambda: [0, 0])
     challenges_won: List[int] = field(default_factory=lambda: [0, 0])
     wd4_illegal: List[int] = field(default_factory=lambda: [0, 0])
+    stacks: List[int] = field(default_factory=lambda: [0, 0])
+    extra_cards: List[int] = field(default_factory=lambda: [0, 0])
     reshuffles: int = 0
 
 
@@ -134,9 +150,16 @@ class Game:
         self.end_reason: Optional[str] = None
         self.events: List[Dict[str, Any]] = []
         self.stats = GameStats()
-        # WD4 challenge context
-        self._wd4_offender: Optional[int] = None
+        # Penalty owed by the player to act (Phase.RESPOND).
+        self.pending_draw = 0
+        self._offender: Optional[int] = None
+        self._can_challenge = False
         self._wd4_was_illegal = False
+        # The batch of same-rank cards being played this turn.
+        self._batch_rank: Optional[Rank] = None
+        self._batch_count = 0
+        self._batch_is_response = False
+        self._batch_illegal_wd4 = False
 
         self._deal()
 
@@ -253,8 +276,18 @@ class Game:
     def legal_actions(self) -> List[Action]:
         if self.phase is Phase.OVER:
             return []
-        if self.phase is Phase.CHALLENGE:
-            return [CHALLENGE, ACCEPT]
+        if self.phase is Phase.RESPOND:
+            actions = [CHALLENGE, ACCEPT] if self._can_challenge else [ACCEPT]
+            for card in self._stackable(self.current_player):
+                actions.extend(self._play_actions(card))
+            return actions
+        if self.phase is Phase.MULTI:
+            actions = []
+            for card in sorted(set(self.hands[self.current_player])):
+                if card.rank is self._batch_rank:
+                    actions.extend(self._play_actions(card))
+            actions.append(DONE)
+            return actions
         if self.phase is Phase.DREW:
             return self._play_actions(self.pending_card) + [PASS]
         actions: List[Action] = []
@@ -276,8 +309,10 @@ class Game:
             draw_pile_size=len(self.draw_pile),
             discard_pile=tuple(self.discard),
             pending_card=self.pending_card if p == self.current_player else None,
+            pending_draw=self.pending_draw if p == self.current_player else 0,
             turn=self.turn,
             history=tuple(self.events),
+            rules=self.rules,
         )
 
     def step(self, action: Action) -> None:
@@ -287,8 +322,10 @@ class Game:
             raise IllegalAction(f"illegal action {action} in phase {self.phase.value}")
         p = self.current_player
 
-        if self.phase is Phase.CHALLENGE:
-            self._resolve_challenge(p, action)
+        if action.type in (ActionType.CHALLENGE, ActionType.ACCEPT):
+            self._resolve_response(p, action)
+        elif action.type is ActionType.DONE:
+            self._resolve_batch(p, won=False)
         elif action.type is ActionType.PLAY:
             self._play(p, action)
         elif action.type is ActionType.DRAW:
@@ -317,65 +354,94 @@ class Game:
         else:
             self._end_turn(1 - p)
 
+    def _stackable(self, p: int) -> List[Card]:
+        """Draw cards ``p`` may stack on the pending penalty."""
+        if not self.rules.stack_draws:
+            return []
+        top_is_draw2 = self.top_card.rank is Rank.DRAW_TWO
+        return [c for c in sorted(set(self.hands[p]))
+                if c.rank is Rank.WILD_DRAW_FOUR or (c.rank is Rank.DRAW_TWO and top_is_draw2)]
+
     def _play(self, p: int, action: Action) -> None:
         card = action.card
-        illegal_wd4 = card.rank is Rank.WILD_DRAW_FOUR and self._has_color(p)
+        if self.phase is not Phase.MULTI:
+            # First card of this turn's batch.
+            self._batch_is_response = self.phase is Phase.RESPOND
+            self._batch_illegal_wd4 = (card.rank is Rank.WILD_DRAW_FOUR
+                                       and not self._batch_is_response and self._has_color(p))
+            self._batch_rank = card.rank
+            self._batch_count = 0
+            if self._batch_is_response:
+                self.stats.stacks[p] += 1
+            if self._batch_illegal_wd4:
+                self.stats.wd4_illegal[p] += 1
+        else:
+            self.stats.extra_cards[p] += 1
         self.hands[p].remove(card)
         self.discard.append(card)
         self.current_color = action.color if card.rank.is_wild else card.color
         self.stats.cards_played[p] += 1
         rk = self.stats.played_by_rank[p]
         rk[card.rank.value] = rk.get(card.rank.value, 0) + 1
-        if illegal_wd4:
-            self.stats.wd4_illegal[p] += 1
+        self._batch_count += 1
         self._log("play", player=p, card=card.to_str(),
                   color=self.current_color.value if self.current_color else None)
 
-        opp = 1 - p
         won = not self.hands[p]
-        if card.rank in (Rank.SKIP, Rank.REVERSE):
-            nxt = p
-        elif card.rank is Rank.DRAW_TWO:
-            self._draw(opp, 2)
-            nxt = p
-        elif card.rank is Rank.WILD_DRAW_FOUR:
-            if self.rules.allow_wd4_challenge and not won:
-                self._wd4_offender = p
-                self._wd4_was_illegal = illegal_wd4
+        if (not won and self.rules.multi_play
+                and any(c.rank is card.rank for c in self.hands[p])):
+            self.phase = Phase.MULTI
+            self.pending_card = None
+            return
+        self._resolve_batch(p, won)
+
+    def _resolve_batch(self, p: int, won: bool) -> None:
+        """Apply the effect of the cards played this turn."""
+        rank, n = self._batch_rank, self._batch_count
+        self._batch_rank = None
+        opp = 1 - p
+        if rank in (Rank.DRAW_TWO, Rank.WILD_DRAW_FOUR):
+            self.pending_draw += (2 if rank is Rank.DRAW_TWO else 4) * n
+            self._offender = p
+            if won:
+                self._draw(opp, self.pending_draw)
+                self.pending_draw = 0
+                self._finish(p, "out_of_cards")
+                return
+            self._can_challenge = (rank is Rank.WILD_DRAW_FOUR and self.rules.allow_wd4_challenge
+                                   and not self._batch_is_response)
+            self._wd4_was_illegal = self._batch_illegal_wd4
+            if self._can_challenge or self._stackable(opp):
                 self.current_player = opp
-                self.phase = Phase.CHALLENGE
+                self.phase = Phase.RESPOND
                 self.pending_card = None
                 return
-            self._draw(opp, 4)
-            nxt = p
-        else:
-            nxt = opp
-
+            self._draw(opp, self.pending_draw)
+            self.pending_draw = 0
+            self._end_turn(p)
+            return
         if won:
             self._finish(p, "out_of_cards")
         else:
-            self._end_turn(nxt)
+            self._end_turn(p if rank in (Rank.SKIP, Rank.REVERSE) else opp)
 
-    def _resolve_challenge(self, victim: int, action: Action) -> None:
-        offender = self._wd4_offender
-        self._wd4_offender = None
+    def _resolve_response(self, victim: int, action: Action) -> None:
+        offender, owed = self._offender, self.pending_draw
+        self._offender, self.pending_draw = None, 0
         if action.type is ActionType.ACCEPT:
             self._log("accept", player=victim)
-            self._draw(victim, 4)
+            self._draw(victim, owed)
             self._end_turn(offender)
             return
         self.stats.challenges[victim] += 1
         success = self._wd4_was_illegal
-        self._log("challenge", player=victim, success=success,
-                  # Revealing the offender's hand to the challenger is part of the
-                  # official rule; we only log whether it succeeded.
-                  )
+        self._log("challenge", player=victim, success=success)
         if success:
             self.stats.challenges_won[victim] += 1
-            self._draw(offender, 4)
+            self._draw(offender, owed)
             self._end_turn(victim)
         else:
-            self._draw(victim, 6)
+            self._draw(victim, owed + 2)
             self._end_turn(offender)
 
     # ---------------------------------------------------------------- scoring
@@ -403,5 +469,7 @@ class Game:
             "challenges": list(s.challenges),
             "challenges_won": list(s.challenges_won),
             "wd4_illegal": list(s.wd4_illegal),
+            "stacks": list(s.stacks),
+            "extra_cards": list(s.extra_cards),
             "reshuffles": s.reshuffles,
         }

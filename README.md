@@ -65,7 +65,8 @@ python -m unittest
 ```
 
 Rule variants are flags on every command: `--hand-size`, `--draw-until-playable`,
-`--no-play-drawn`, `--wd4-restricted`, `--no-challenge` and `--max-turns`.
+`--no-play-drawn`, `--wd4-restricted`, `--no-challenge`, `--multi-play`, `--stack-draws`,
+`--house` and `--max-turns`.
 
 ## Rules implemented (official 2-player rules)
 
@@ -78,6 +79,11 @@ Rule variants are flags on every command: `--hand-size`, `--draw-until-playable`
 - If the last card played is a Draw Two or Wild Draw Four, the opponent still draws, and those cards count toward the winner's score.
 - Scoring: number cards are worth their face value, action cards 20 and wilds 50. The winner scores the points left in the loser's hand.
 - Not modeled: the penalty for forgetting to announce your last card (bots always announce it).
+
+**House rules** (on by default in the web app; on the command line, use `--multi-play`, `--stack-draws`, or `--house` for both):
+
+- **Multi-play**: after playing a card, you can add more cards of the same number or symbol, in any color, in the same turn. The last card sets the color. Draw cards add up, so two +2s make the opponent draw 4. Stop early with **End turn**.
+- **Stacking**: when you're hit with a +2, you can answer with a +2 or a +4. When you're hit with a +4, you can answer with a +4. The total passes to the other player, and whoever can't or won't stack draws all of it. A +4 played as a stack can't be challenged. A +4 that starts a penalty can still be challenged: if the challenge succeeds, the player who played it draws the whole total; if it fails, the challenger draws the total plus 2.
 
 ## Writing your own bot
 
