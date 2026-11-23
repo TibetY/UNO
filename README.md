@@ -2,30 +2,47 @@
 
 A two-player (1v1) color-matching shedding card game engine with the classic
 108-card deck, built for **automated play and statistics gathering**. It's
-pure Python 3.9+ with no dependencies, and includes a web UI.
+pure Python 3.9+ with no dependencies, plus a React web app in `web/`.
 
-## Web app
+## Web app (React)
+
+The web app is in `web/`. It's React and TypeScript, built with Vite. A
+TypeScript port of the engine runs entirely in the browser, so no server is
+needed.
 
 ```bash
-python -m cardduel serve            # then open http://127.0.0.1:8000
+cd web
+npm install
+npm run dev              # local development server
+npm test                 # engine tests, including checks against the Python engine's stats
+npm run build            # static site in web/dist/, deployable to any static host
+npm run build:artifact   # single self-contained page: web/dist-artifact/card-duel.html
 ```
 
-- **Play**: play against a bot. Playable cards lift up. Click the deck to draw, pick a color for wilds, and decide whether to challenge a Wild Draw Four.
+The app has four tabs:
+
+- **Play a bot**: play against `random`, `greedy` or `heuristic`.
+- **Online**: play a friend in real time. One player creates a game and shares the 5-character code, and the other joins with it.
 - **Watch bots**: two bots play with both hands face up. You can pause, step one move at a time and change the speed.
-- **Simulate**: run up to 50,000 games between two bots. Results include win rates with confidence intervals, a histogram of game length and card-usage tables.
-- **Rule options** at the bottom apply to all three modes.
+- **Simulate**: run up to 100,000 games in the browser. Results include win rates with confidence intervals, a histogram of game length and card-usage tables.
 
-The browser talks to the Python engine through a small JSON API, so the stats
-in the web app come from the same rules as the CLI:
+**How online play works.** It runs over a claude.ai Artifact's shared room, so
+it works when the `build:artifact` page is published as an Artifact. The
+host's browser runs the engine and acts as referee. Each side shares one small
+"presence" object: the host shares the guest's view of the table, and the
+guest shares the move it picked. The host checks every move against the
+rules, and the host's own hand is never sent until the game ends. Presence
+always holds the latest state, so a dropped message or a late joiner needs no
+special handling. If the guest reloads, they can rejoin the same game with
+the code.
 
-| method | path | body |
-|---|---|---|
-| GET  | `/api/agents` | |
-| POST | `/api/game` | `{p0: "human"\|agent, p1: agent, seed?, starter?, rules?}` |
-| GET  | `/api/game/{id}` | |
-| POST | `/api/game/{id}/action` | `{index}`: an index into the `legal` list |
-| POST | `/api/game/{id}/advance` | `{}`: the bot to move takes one action |
-| POST | `/api/simulate` | `{p0, p1, games, seed, rules?}` |
+Outside claude.ai, the same code falls back to `BroadcastChannel`, which links
+tabs of one browser. That fallback is for development and tests. Playing over
+the internet from a different host would need a small relay server that
+implements the same `SharedRoom` interface (`web/src/online/transport.ts`).
+
+The TypeScript engine uses the same rules as the Python engine. Its tests
+check that the bots' win rates and game lengths match the Python simulator.
 
 ## Quick start (CLI)
 
