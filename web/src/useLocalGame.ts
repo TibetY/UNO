@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AGENTS, type Agent, type AgentName } from "./engine/agents";
-import { type Action, Game, type Rules, actionKey } from "./engine/engine";
+import { type Action, Game, type GameEvent, type Rules, actionKey } from "./engine/engine";
 import { randomSeed } from "./engine/rng";
 
 export type Seat = AgentName | "human";
@@ -12,9 +12,13 @@ export interface LocalGameOptions {
   starter?: number;
 }
 
-/** Runs a game in the browser; bot seats move on their own after `delay()` ms. */
-export function useLocalGame(delay: () => number, paused = false) {
+/**
+ * Runs a game in the browser. Bot seats move on their own after
+ * `delay(newEvents, game)` ms, where newEvents happened since the last move.
+ */
+export function useLocalGame(delay: (newEvents: readonly GameEvent[], game: Game) => number, paused = false) {
   const game = useRef<Game | null>(null);
+  const seen = useRef(0);
   const agents = useRef<(Agent | null)[]>([null, null]);
   const [, setTick] = useState(0);
   const bump = () => setTick((t) => t + 1);
@@ -30,6 +34,7 @@ export function useLocalGame(delay: () => number, paused = false) {
     });
     agents.current.forEach((a, p) => a?.onGameStart(p, seed * 2 + p + 1));
     game.current = new Game({ seed, starter, rules: o.rules });
+    seen.current = 0;
     bump();
   }, []);
 
@@ -66,7 +71,9 @@ export function useLocalGame(delay: () => number, paused = false) {
 
   useEffect(() => {
     if (!botToMove || paused) return;
-    const t = window.setTimeout(stepBot, delay());
+    const fresh = g!.events.slice(seen.current);
+    seen.current = g!.events.length;
+    const t = window.setTimeout(stepBot, delay(fresh, g!));
     return () => window.clearTimeout(t);
   }, [botToMove, paused, version, stepBot, delay]);
 

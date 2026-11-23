@@ -4,6 +4,7 @@ import { type AnySession, GuestSession, HostSession, cleanName, makeCode, roomNa
 import type { RoomProvider } from "../online/transport";
 import { loadString, save } from "../storage";
 import { GameLog, Table } from "./Table";
+import { Stage, useImmersive } from "../immersive";
 
 interface Props {
   provider: RoomProvider | null;
@@ -17,6 +18,7 @@ export function OnlinePage({ provider, rules, initialCode }: Props) {
   const [code, setCode] = useState(initialCode);
   const [error, setError] = useState("");
   const [joining, setJoining] = useState(false);
+  const { enter, exit } = useImmersive();
 
   useEffect(() => setCode((c) => initialCode || c), [initialCode]);
 
@@ -27,6 +29,7 @@ export function OnlinePage({ provider, rules, initialCode }: Props) {
     save("name", nick);
     const c = role === "host" ? makeCode() : code.trim().toLowerCase();
     if (!validCode(c)) return setError("Enter the 5-character code your friend sent you.");
+    enter(); // inside the tap, so the browser allows full screen
     setError("");
     setJoining(true);
     try {
@@ -34,6 +37,7 @@ export function OnlinePage({ provider, rules, initialCode }: Props) {
       setSession(role === "host" ? new HostSession(room, c, nick, rules) : new GuestSession(room, c, nick));
       setHash(`join-${c}`);
     } catch (e) {
+      exit();
       setError(errorText(e));
     } finally {
       setJoining(false);
@@ -44,6 +48,7 @@ export function OnlinePage({ provider, rules, initialCode }: Props) {
     void session?.leave();
     setSession(null);
     setHash("online");
+    exit();
   };
 
   if (session) return <OnlineGame session={session} onLeave={leave} />;
@@ -131,7 +136,7 @@ function OnlineGame({ session, onLeave }: { session: AnySession; onLeave: () => 
 
   return (
     <section className="layout">
-      <div className="table-col">
+      <Stage>
         {banner && <div className="banner" role="status">{banner}</div>}
         {s.view ? (
           <Table
@@ -166,7 +171,7 @@ function OnlineGame({ session, onLeave }: { session: AnySession; onLeave: () => 
             </div>
           </div>
         )}
-      </div>
+      </Stage>
       <aside className="side">
         <div className="panel">
           <h3>Online game</h3>

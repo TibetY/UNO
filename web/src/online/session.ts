@@ -204,7 +204,7 @@ function validView(w: unknown): w is WireView {
     typeof v.top === "string" && CARD_RE.test(v.top) &&
     (v.pending === null || (typeof v.pending === "string" && CARD_RE.test(v.pending))) &&
     Array.isArray(v.legal) && v.legal.every((a) => typeof a === "string") &&
-    Array.isArray(v.events) && Array.isArray(v.handSizes) && typeof v.pendingDraw === "number" && v.you === 1
+    Array.isArray(v.events) && Array.isArray(v.handSizes) && typeof v.pendingDraw === "number" && typeof v.gameId === "string" && v.gameId.length < 40 && v.you === 1
   );
 }
 

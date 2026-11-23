@@ -56,9 +56,9 @@ export function Card({ id, chosen, playable, dim, fresh, highlight, className = 
   );
 }
 
-export function CardBack({ className = "" }: { className?: string }) {
+export function CardBack({ className = "", style }: { className?: string; style?: CSSProperties }) {
   return (
-    <div className={`card back ${className}`} role="img" aria-label="Face-down card">
+    <div className={`card back ${className}`} style={style} role="img" aria-label="Face-down card">
       <div className="face"><div className="emblem"><span>DUEL</span></div></div>
     </div>
   );

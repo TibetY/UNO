@@ -26,6 +26,14 @@ The app has four tabs:
 - **Watch bots**: two bots play with both hands face up. You can pause, step one move at a time and change the speed.
 - **Simulate**: run up to 100,000 games in the browser. Results include win rates with confidence intervals, a histogram of game length and card-usage tables.
 
+**On phones**, starting a game (New game, Create game, Join) switches to a
+full-screen table that can't scroll or zoom. **☰ Menu** goes back to the
+settings and log, and **⛶ Full screen** returns to the game. Where the browser
+allows it (for example Android Chrome), the browser's own controls are hidden
+too. iPhone Safari never lets a web page hide its address bar, so on an iPhone
+use **Share → Add to Home Screen**. The site includes a web-app manifest, so it
+then opens like an installed app with no browser controls.
+
 **How online play works.** It runs over a claude.ai Artifact's shared room, so
 it works when the `build:artifact` page is published as an Artifact. The
 host's browser runs the engine and acts as referee. Each side shares one small

@@ -5,6 +5,7 @@ import type { Rules } from "../engine/engine";
 import { useLocalGame } from "../useLocalGame";
 import { viewFromGame } from "../view";
 import { GameLog, Table } from "./Table";
+import { Stage, useImmersive } from "../immersive";
 
 export function WatchPage({ rules, active }: { rules: Rules; active: boolean }) {
   const [p0, setP0] = useState<AgentName>("greedy");
@@ -16,6 +17,7 @@ export function WatchPage({ rules, active }: { rules: Rules; active: boolean }) 
   speedRef.current = speed;
   const delay = useCallback(() => Math.round(1600 * (1 - speedRef.current / 100) ** 2) + 30, []);
   const { game, start, stepBot } = useLocalGame(delay, paused || !active);
+  const { enter } = useImmersive();
 
   const newGame = () => start({ seats: [p0, p1], rules });
   useEffect(() => {
@@ -36,8 +38,10 @@ export function WatchPage({ rules, active }: { rules: Rules; active: boolean }) 
 
   return (
     <section className="layout">
-      <Table view={view} status={paused && !game.isOver ? "Paused" : undefined}
-        gameOverActions={<button className="btn primary" onClick={newGame}>Next game</button>} />
+      <Stage>
+        <Table view={view} status={paused && !game.isOver ? "Paused" : undefined}
+          gameOverActions={<button className="btn primary" onClick={newGame}>Next game</button>} />
+      </Stage>
       <aside className="side">
         <div className="panel">
           <h3>Bots</h3>
@@ -64,7 +68,7 @@ export function WatchPage({ rules, active }: { rules: Rules; active: boolean }) 
             <button className="btn" onClick={() => setPaused((x) => !x)}>{paused ? "Resume" : "Pause"}</button>
             <button className="btn" onClick={() => { setPaused(true); stepBot(); }}>Step</button>
           </div>
-          <button className="btn primary wide" onClick={newGame}>New game</button>
+          <button className="btn primary wide" onClick={() => { newGame(); enter(); }}>New game</button>
           <div className="note">Seed {game.seed}</div>
         </div>
         <div className="panel log-panel">

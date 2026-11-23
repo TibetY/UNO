@@ -116,6 +116,8 @@ export class IllegalAction extends Error {}
 export class Game {
   readonly rules: Rules;
   readonly seed: number;
+  /** Distinguishes two games dealt from the same seed (UI only; not part of the rules). */
+  readonly uid = Math.random().toString(36).slice(2, 8);
   readonly starter: number;
   private rng: Rng;
   hands: CardId[][] = [[], []];

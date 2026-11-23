@@ -3,6 +3,7 @@ import { COLORS, type CardId, type Color, cap, cardLabel, isWild, parseCard, ran
 import type { Action, GameEvent } from "../engine/engine";
 import type { TableView } from "../view";
 import { Card, CardBack } from "./Card";
+import { DEAL_STAGGER, DRAW_STAGGER } from "../anim";
 
 interface Props {
   view: TableView;
@@ -177,9 +178,10 @@ function Hand({ v, seat, small, playable, onPlay }: {
   playable?: Map<CardId, Action[]>; onPlay?: (c: CardId) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const prev = useRef<CardId[] | null>(null);
   const hand = v.hands[seat];
   const n = v.handSizes[seat];
+  const sorted = useMemo(() => (hand ? sortHand(hand) : null), [hand?.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  const handKey = sorted ? sorted.join(",") : `#${n}`;
   const [overlap, setOverlap] = useState(6);
 
   useLayoutEffect(() => {
@@ -199,38 +201,60 @@ function Hand({ v, seat, small, playable, onPlay }: {
     return () => ro.disconnect();
   }, [n]);
 
-  // Mark cards that weren't in the previous render so they animate in.
-  const fresh = useMemo(() => {
-    const out = new Set<number>();
-    if (!hand) return out;
-    const counts = new Map<CardId, number>();
-    for (const c of prev.current ?? []) counts.set(c, (counts.get(c) ?? 0) + 1);
-    sortHand(hand).forEach((c, i) => {
-      const k = counts.get(c) ?? 0;
-      if (k > 0) counts.set(c, k - 1);
-      else if (prev.current) out.add(i);
-    });
+  // Which cards just arrived, and when each should start flying in. A new game
+  // deals the whole hand quickly; later draws (penalties, the deck) arrive slower.
+  const prev = useRef<{ game: string; cards: CardId[] | null; count: number } | null>(null);
+  const delays = useMemo(() => {
+    const out = new Map<number, number>();
+    const p = prev.current;
+    const newGame = !p || p.game !== v.gameId;
+    // Top seat's cards are offset half a step so the two hands are dealt alternately.
+    const offset = small ? DEAL_STAGGER / 2 : 0;
+    if (newGame) {
+      for (let i = 0; i < n; i++) out.set(i, i * DEAL_STAGGER + offset);
+      return out;
+    }
+    let k = 0;
+    if (sorted && p.cards) {
+      const counts = new Map<CardId, number>();
+      for (const c of p.cards) counts.set(c, (counts.get(c) ?? 0) + 1);
+      sorted.forEach((c, i) => {
+        const left = counts.get(c) ?? 0;
+        if (left > 0) counts.set(c, left - 1);
+        else out.set(i, k++ * DRAW_STAGGER);
+      });
+    } else if (!sorted) {
+      for (let i = p.count; i < n; i++) out.set(i, k++ * DRAW_STAGGER);
+    }
     return out;
-  }, [hand]);
+  }, [handKey, v.gameId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    prev.current = hand;
-  }, [hand]);
+    prev.current = { game: v.gameId, cards: sorted, count: n };
+  }, [handKey, v.gameId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const freshStyle = (i: number) => {
+    const d = delays.get(i);
+    return d === undefined ? undefined : ({ "--deal-delay": `${d}ms` } as React.CSSProperties);
+  };
 
   const style = { "--overlap": `${overlap}px` } as React.CSSProperties;
   let pendingMarked = false;
+  const seen = new Map<CardId, number>();
   return (
     <div ref={ref} className={`hand ${small ? "hand-small" : "hand-main"}`} style={style}>
-      {hand
-        ? sortHand(hand).map((c, i) => {
+      {sorted
+        ? sorted.map((c, i) => {
+            const nth = (seen.get(c) ?? 0) + 1;
+            seen.set(c, nth);
             const canPlay = !!playable?.has(c);
             const isPending = !pendingMarked && v.phase === "drew" && v.current === seat && c === v.pending;
             if (isPending) pendingMarked = true;
             return (
-              <Card key={`${c}-${i}`} id={c} fresh={fresh.has(i)} highlight={isPending}
+              <Card key={`${c}#${nth}`} id={c} fresh={delays.has(i)} style={freshStyle(i)} highlight={isPending}
                 playable={canPlay} dim={!!playable && !canPlay} onClick={() => onPlay?.(c)} />
             );
           })
-        : Array.from({ length: n }, (_, i) => <CardBack key={i} />)}
+        : Array.from({ length: n }, (_, i) => <CardBack key={i} className={delays.has(i) ? "fresh" : ""} style={freshStyle(i)} />)}
     </div>
   );
 }

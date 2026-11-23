@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { AGENT_BLURBS, AGENT_NAMES, type AgentName } from "../engine/agents";
-import type { Rules } from "../engine/engine";
+import type { Game, GameEvent, Rules } from "../engine/engine";
+import { dealAnimationMs } from "../anim";
 import { cap } from "../engine/cards";
 import { useLocalGame } from "../useLocalGame";
 import { viewFromGame } from "../view";
 import { GameLog, Table } from "./Table";
+import { Stage, useImmersive } from "../immersive";
 
 export function PlayPage({ rules }: { rules: Rules }) {
   const [opponent, setOpponent] = useState<AgentName>("heuristic");
@@ -12,8 +14,9 @@ export function PlayPage({ rules }: { rules: Rules }) {
   const [seed, setSeed] = useState("");
   const [record, setRecord] = useState<[number, number]>([0, 0]);
   const [counted, setCounted] = useState(-1);
-  const delay = useCallback(() => 750, []);
+  const delay = useCallback((evs: readonly GameEvent[], g: Game) => 750 + dealAnimationMs(evs, g.rules.handSize), []);
   const { game, start, act } = useLocalGame(delay);
+  const { enter } = useImmersive();
 
   const newGame = () =>
     start({
@@ -40,8 +43,10 @@ export function PlayPage({ rules }: { rules: Rules }) {
 
   return (
     <section className="layout">
-      <Table view={view} onAction={act}
-        gameOverActions={<button className="btn primary" onClick={newGame}>New game</button>} />
+      <Stage>
+        <Table view={view} onAction={act}
+          gameOverActions={<button className="btn primary" onClick={newGame}>New game</button>} />
+      </Stage>
       <aside className="side">
         <div className="panel">
           <h3>Game</h3>
@@ -64,7 +69,7 @@ export function PlayPage({ rules }: { rules: Rules }) {
             <label htmlFor="seed">Seed <small>(optional, replays the same deal)</small></label>
             <input id="seed" type="number" placeholder="Random" value={seed} onChange={(e) => setSeed(e.target.value)} />
           </div>
-          <button className="btn primary wide" onClick={newGame}>New game</button>
+          <button className="btn primary wide" onClick={() => { newGame(); enter(); }}>New game</button>
           <div className="note">Seed {game.seed} · This session: you {record[0]}, bots {record[1]}</div>
         </div>
         <div className="panel log-panel">
