@@ -34,6 +34,10 @@ too. iPhone Safari never lets a web page hide its address bar, so on an iPhone
 use **Share → Add to Home Screen**. The site includes a web-app manifest, so it
 then opens like an installed app with no browser controls.
 
+**Two players on one device**: under **Play**, choose the opponent **A friend on this device**. Players take turns on one phone or computer. Between turns, a "Pass the device" screen hides both hands until the next player taps to show theirs.
+
+**Online on Netlify**: the site includes a small relay function (`web/netlify/functions/room.mts`, with the logic in `web/netlify/lib/room-core.ts`). Each player's browser posts its presence to `/api/room/<game>` and gets the other player's back. State is kept in Netlify Blobs, so no other service or account is needed. Browsers check about every 0.7 seconds while moves are happening, slowing to every 3 seconds when idle (less in a background tab), so a game uses a few hundred function calls. Netlify deploys the function on its own with the site. The app uses the claude.ai room when it's running there, this relay on Netlify, and same-browser tabs anywhere else.
+
 **How online play works.** It runs over a claude.ai Artifact's shared room, so
 it works when the `build:artifact` page is published as an Artifact. The
 host's browser runs the engine and acts as referee. Each side shares one small

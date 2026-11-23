@@ -6,3 +6,7 @@
 
 [build.environment]
   NODE_VERSION = "20"
+
+# The relay for online games (web/netlify/functions/room.mts), stored in Netlify Blobs.
+[functions]
+  directory = "netlify/functions"

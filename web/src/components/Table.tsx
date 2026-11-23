@@ -22,10 +22,12 @@ interface Props {
   gameOverActions?: ReactNode;
   /** Hide the game-over dialog (e.g. spectators). */
   hideGameOver?: boolean;
+  /** Show both hands face down (pass-and-play, while the device changes hands). */
+  hideHands?: boolean;
 }
 
 export function playerName(v: TableView, p: number) {
-  return v.you === p ? "You" : v.names[p];
+  return v.you === p && !v.sharedDevice ? "You" : v.names[p];
 }
 
 interface Keyed {
@@ -51,7 +53,8 @@ function canFollow(prev: CardId, next: CardId, multiPlay: boolean): boolean {
   return multiPlay && parseCard(next).rank === p.rank;
 }
 
-export function Table({ view: v, onActions, busy, status, seatExtra, gameOverActions, hideGameOver }: Props) {
+export function Table({ view: v0, onActions, busy, status, seatExtra, gameOverActions, hideGameOver, hideHands }: Props) {
+  const v = hideHands ? { ...v0, hands: [null, null], legal: [] } : v0;
   const [selected, setSelected] = useState<Keyed[]>([]);
   const [wildChain, setWildChain] = useState<CardId[] | null>(null);
   const deck = useRef<HTMLButtonElement>(null);
@@ -337,20 +340,22 @@ function Hand({ v, seat, small, cardState, onTap }: {
   }
 
   const slots = useRef(new Map<string, HTMLDivElement>());
-  const prev = useRef<{ game: string; pos: Map<string, { x: number; y: number }>; rects: Map<string, DOMRect>; cards: Map<string, CardId> } | null>(null);
+  const prev = useRef<{ game: string; seat: number; faceUp: boolean; pos: Map<string, { x: number; y: number }>; rects: Map<string, DOMRect>; cards: Map<string, CardId> } | null>(null);
 
   useLayoutEffect(() => {
     const host = ref.current!;
     const reduce = reducedMotion();
     const before = prev.current;
     const newGame = !before || before.game !== v.gameId;
+    // A different player's hand now sits here (pass-and-play): just place it.
+    const swapped = !!before && !newGame && (before.seat !== seat || before.faceUp !== !!hand);
     const hostRect = host.getBoundingClientRect();
     const pos = new Map<string, { x: number; y: number }>();
     const rects = new Map<string, DOMRect>();
     const cards = new Map<string, CardId>();
 
     // Cards that left this hand: remember where they were for the pile.
-    if (before && !newGame) {
+    if (before && !newGame && !swapped) {
       for (const [k, r] of before.rects) {
         if (!slots.current.has(k)) motion.departures.current.push({ seat, card: before.cards.get(k) || null, rect: r, at: performance.now() });
       }
@@ -369,7 +374,7 @@ function Hand({ v, seat, small, cardState, onTap }: {
       pos.set(it.key, p);
       cards.set(it.key, it.card);
       rects.set(it.key, new DOMRect(hostRect.left + p.x, hostRect.top + p.y, el.offsetWidth, el.offsetHeight));
-      if (reduce) return;
+      if (reduce || swapped) return;
       const old = newGame ? undefined : before!.pos.get(it.key);
       if (old) {
         if (Math.abs(old.x - p.x) < 0.5 && Math.abs(old.y - p.y) < 0.5) return;
@@ -389,7 +394,7 @@ function Hand({ v, seat, small, cardState, onTap }: {
         flyFrom(el, deckRect, { duration: FLIGHT_MS, delay, rotate: small ? 8 : -10 });
       }
     });
-    prev.current = { game: v.gameId, pos, rects, cards };
+    prev.current = { game: v.gameId, seat, faceUp: !!hand, pos, rects, cards };
   });
 
   const style = { "--overlap": `${overlap}px` } as React.CSSProperties;

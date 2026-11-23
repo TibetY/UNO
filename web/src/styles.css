@@ -283,6 +283,16 @@ html.immersive body { position: fixed; inset: 0; width: 100%; }
   .stage.immersive .pile-wrap { gap: 20px; }
 }
 
+/* pass-and-play handoff screen */
+.handoff {
+  position: absolute; inset: 0; z-index: 25; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; text-align: center; padding: 24px; border-radius: 22px;
+  background: radial-gradient(ellipse at 50% 45%, rgba(15,50,41,.92), rgba(8,20,17,.97));
+}
+.stage.immersive .handoff { border-radius: 0; }
+.handoff h2 { margin: 0; font-family: var(--font-display); font-size: 34px; font-weight: 800; }
+.handoff .btn { margin-top: 10px; }
+
 /* ---------------- dialogs ---------------- */
 .overlay { position: absolute; inset: 0; background: rgba(5,12,10,.62); backdrop-filter: blur(3px);
   display: grid; place-items: center; z-index: 20; padding: 16px; }

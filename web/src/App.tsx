@@ -6,6 +6,7 @@ import { PlayPage } from "./components/PlayPage";
 import { SimPage } from "./components/SimPage";
 import { WatchPage } from "./components/WatchPage";
 import { type RoomProvider, artifactRoomProvider, localRoomProvider } from "./online/transport";
+import { pollRoomProvider } from "./online/poll";
 import { load, save } from "./storage";
 
 type View = "play" | "online" | "watch" | "sim";
@@ -30,7 +31,9 @@ export function App() {
 
   useEffect(() => {
     let alive = true;
-    artifactRoomProvider().then((p) => alive && setProvider(p ?? localRoomProvider));
+    // claude.ai's room, else this site's relay function (Netlify), else tabs of this browser.
+    (async () => (await artifactRoomProvider()) ?? (await pollRoomProvider()) ?? localRoomProvider)()
+      .then((p) => alive && setProvider(p));
     const onHash = () => {
       const next = readHash();
       // Ignore our own replaceState updates while a game is open.

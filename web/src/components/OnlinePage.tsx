@@ -60,7 +60,7 @@ export function OnlinePage({ provider, rules, initialCode }: Props) {
         <p className="lede">
           Start a game and send your friend the code. They open this page, pick <b>Online</b> and enter it.
           {provider.kind === "local" && (
-            <span className="warn"> This copy isn't on the hosted page, so it can only link tabs in this browser. Use the hosted version to play over the internet.</span>
+            <span className="warn"> Online play needs the hosted site (your Netlify site or the claude.ai page). Running here, it can only link tabs in this browser.</span>
           )}
         </p>
         <div className="field">

@@ -11,6 +11,8 @@ export interface TableView {
   };
   /** Seat the viewer controls, or null when only watching. */
   you: number | null;
+  /** Pass-and-play: label seats by name, never "You". */
+  sharedDevice?: boolean;
   /** Seat drawn at the bottom of the table. */
   bottom: number;
   names: [string, string];
