@@ -2,9 +2,32 @@
 
 A two-player (1v1) color-matching shedding card game engine with the classic
 108-card deck, built for **automated play and statistics gathering**. It's
-pure Python 3.9+ with no dependencies.
+pure Python 3.9+ with no dependencies, and includes a web UI.
 
-## Quick start
+## Web app
+
+```bash
+python -m cardduel serve            # then open http://127.0.0.1:8000
+```
+
+- **Play**: play against a bot. Playable cards lift up. Click the deck to draw, pick a color for wilds, and decide whether to challenge a Wild Draw Four.
+- **Watch bots**: two bots play with both hands face up. You can pause, step one move at a time and change the speed.
+- **Simulate**: run up to 50,000 games between two bots. Results include win rates with confidence intervals, a histogram of game length and card-usage tables.
+- **Rule options** at the bottom apply to all three modes.
+
+The browser talks to the Python engine through a small JSON API, so the stats
+in the web app come from the same rules as the CLI:
+
+| method | path | body |
+|---|---|---|
+| GET  | `/api/agents` | |
+| POST | `/api/game` | `{p0: "human"\|agent, p1: agent, seed?, starter?, rules?}` |
+| GET  | `/api/game/{id}` | |
+| POST | `/api/game/{id}/action` | `{index}`: an index into the `legal` list |
+| POST | `/api/game/{id}/advance` | `{}`: the bot to move takes one action |
+| POST | `/api/simulate` | `{p0, p1, games, seed, rules?}` |
+
+## Quick start (CLI)
 
 ```bash
 # Match between two bots: prints win rates (with 95% CIs), first-player edge, game length, etc.

@@ -3,6 +3,7 @@
     python -m cardduel simulate --p0 heuristic --p1 random --games 10000
     python -m cardduel tournament --games 2000
     python -m cardduel play --opponent heuristic
+    python -m cardduel serve --port 8000
 """
 from __future__ import annotations
 
@@ -197,6 +198,11 @@ def main(argv=None) -> None:
     p.add_argument("--first", action="store_true", help="you go first")
     rule_args(p)
     p.set_defaults(func=cmd_play)
+
+    p = sub.add_parser("serve", help="run the web app")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8000)
+    p.set_defaults(func=lambda a: __import__("cardduel.server", fromlist=["serve"]).serve(a.host, a.port))
 
     args = ap.parse_args(argv)
     args.func(args)
