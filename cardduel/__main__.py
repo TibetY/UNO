@@ -30,6 +30,7 @@ def _rules(args) -> Rules:
         multi_play=args.multi_play or args.house,
         stack_draws=args.stack_draws or args.house,
         number_finish=args.number_finish or args.house,
+        plus_ends_turn=args.plus_ends_turn or args.house,
         custom_cards=args.custom_cards if args.custom_cards is not None else (2 if args.house else 0),
         custom_color=not args.custom_no_color,
         custom_skip=args.custom_skip,
@@ -182,6 +183,8 @@ def main(argv=None) -> None:
                        help="house rule: stack +2/+4 cards to pass the penalty on")
         g.add_argument("--number-finish", action="store_true",
                        help="house rule: you can only go out on a number card")
+        g.add_argument("--plus-ends-turn", action="store_true",
+                       help="house rule: after a + card the opponent plays next")
         g.add_argument("--custom-cards", type=int, default=None,
                        help="blank custom cards in the deck (default 0; 2 with --rules c-house)")
         g.add_argument("--custom-draw", type=int, default=10, help="custom card: opponent picks up this many")

@@ -81,7 +81,7 @@ export function App() {
 
 const RULE_SETS: { id: string; name: string; rules: Rules; blurb: string }[] = [
   { id: "c-house", name: "C House Rules", rules: HOUSE_RULES,
-    blurb: "Play several of the same card at once, stack +2 on +2 and +4 on +4, finish only on a number, and 2 custom cards." },
+    blurb: "Play several of the same card at once, stack +2 on +2 and +4 on +4, no extra turn after a + card, finish only on a number, and 2 custom cards." },
   { id: "og", name: "OG", rules: OG_RULES, blurb: "The official rules." },
 ];
 
@@ -112,6 +112,7 @@ function RulesPanel({ rules, onChange, onReplace }: {
       <div className="rules-grid">
         <label className="check"><input type="checkbox" checked={rules.multiPlay} onChange={(e) => onChange({ multiPlay: e.target.checked })} /> Play several of the same number or symbol in one turn</label>
         <label className="check"><input type="checkbox" checked={rules.stackDraws} onChange={(e) => onChange({ stackDraws: e.target.checked })} /> Stack +2 on +2, or +4 on +4, to pass the penalty on</label>
+        <label className="check"><input type="checkbox" checked={rules.plusEndsTurn} onChange={(e) => onChange({ plusEndsTurn: e.target.checked })} /> After a + card your turn is over (no playing again)</label>
         <label className="check"><input type="checkbox" checked={rules.numberFinish} onChange={(e) => onChange({ numberFinish: e.target.checked })} /> You can only go out on a number card</label>
       </div>
 

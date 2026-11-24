@@ -17,6 +17,9 @@
  *  - customCards: adds blank custom cards to the deck. What they do is set by
  *    customColor (choose a color), customSkip (the player goes again) and
  *    customDraw (the opponent draws N; stacks only on another custom card).
+ *  - plusEndsTurn: after a +2/+4/custom pick-up card your turn is over: the
+ *    opponent draws (or stacks) and then plays. (Officially, in two-player the
+ *    one who played it goes again.)
  *  - numberFinish: you can only go out on a number card. An action card
  *    (Skip, Reverse, +2, wilds) can't be your last card.
  */
@@ -45,6 +48,8 @@ export interface Rules {
   multiPlay: boolean;
   stackDraws: boolean;
   numberFinish: boolean;
+  /** After a + card the opponent plays next (instead of the player going again). */
+  plusEndsTurn: boolean;
   /** Blank custom cards in the deck. */
   customCards: number;
   /** Custom card: the player picks the color. */
@@ -65,6 +70,7 @@ export const DEFAULT_RULES: Rules = {
   multiPlay: false,
   stackDraws: false,
   numberFinish: false,
+  plusEndsTurn: false,
   customCards: 0,
   customColor: true,
   customSkip: false,
@@ -77,7 +83,7 @@ export const DEFAULT_RULES: Rules = {
 export const OG_RULES: Rules = DEFAULT_RULES;
 
 /** "C House Rules": everything this app adds, switched on. */
-export const HOUSE_RULES: Rules = { ...DEFAULT_RULES, multiPlay: true, stackDraws: true, numberFinish: true, customCards: 2 };
+export const HOUSE_RULES: Rules = { ...DEFAULT_RULES, multiPlay: true, stackDraws: true, numberFinish: true, plusEndsTurn: true, customCards: 2 };
 
 export interface GameEvent {
   t: number;
@@ -172,6 +178,8 @@ export class Game {
   pendingDraw = 0;
   private offender: number | null = null;
   private canChallenge = false;
+  /** Does the player who dealt the current penalty play again once it's settled? */
+  private penaltyKeepsTurn = true;
   private wd4WasIllegal = false;
   // The batch of same-rank cards being played this turn.
   private batchRank: string | null = null;
@@ -443,6 +451,7 @@ export class Game {
         this.pendingDraw = 0;
         return this.finish(p, "out_of_cards");
       }
+      this.penaltyKeepsTurn = !this.rules.plusEndsTurn || (rank === "custom" && this.rules.customSkip);
       this.canChallenge = rank === "wild4" && this.rules.allowWd4Challenge && !this.batchIsResponse;
       this.wd4WasIllegal = this.batchIllegalWd4;
       if (this.canChallenge || this.stackable(opp).length) {
@@ -453,7 +462,7 @@ export class Game {
       }
       this.drawN(opp, this.pendingDraw);
       this.pendingDraw = 0;
-      return this.endTurn(p);
+      return this.endTurn(this.penaltyKeepsTurn ? p : opp);
     }
     if (won) return this.finish(p, "out_of_cards");
     const goesAgain = rank === "skip" || rank === "reverse" || (rank === "custom" && this.rules.customSkip);
@@ -468,7 +477,7 @@ export class Game {
     if (!challenge) {
       this.log("accept", victim, {});
       this.drawN(victim, owed);
-      return this.endTurn(offender);
+      return this.endTurn(this.penaltyKeepsTurn ? offender : victim);
     }
     this.stats.challenges[victim]++;
     const success = this.wd4WasIllegal;
@@ -479,7 +488,7 @@ export class Game {
       this.endTurn(victim);
     } else {
       this.drawN(victim, owed + 2);
-      this.endTurn(offender);
+      this.endTurn(this.penaltyKeepsTurn ? offender : victim);
     }
   }
 

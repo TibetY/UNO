@@ -263,6 +263,20 @@ class HouseRuleTests(unittest.TestCase):
                 self.assertTrue(g.is_over)
                 self.assertEqual(sorted(all_cards(g)), sorted(build_deck(4)))
 
+    def test_plus_ends_turn(self):
+        # Official: the +2 player goes again. With plus_ends_turn, the victim plays next.
+        for rule, nxt in ((False, 0), (True, 1)):
+            g = setup([Card(Rank.DRAW_TWO, R), Card(Rank.ONE, Y)], [Card(Rank.ONE, G)], Card(Rank.TWO, R),
+                      rules=Rules(plus_ends_turn=rule))
+            g.step(Action(ActionType.PLAY, Card(Rank.DRAW_TWO, R)))
+            self.assertEqual((len(g.hands[1]), g.current_player), (3, nxt))
+        # After accepting a stacked penalty, the one who accepted plays next.
+        g = setup([Card(Rank.DRAW_TWO, R), Card(Rank.ONE, Y)], [Card(Rank.DRAW_TWO, B), Card(Rank.ONE, G)],
+                  Card(Rank.TWO, R), rules=Rules(stack_draws=True, plus_ends_turn=True))
+        g.step(Action(ActionType.PLAY, Card(Rank.DRAW_TWO, R)))
+        g.step(Action(ActionType.PLAY, Card(Rank.DRAW_TWO, B)))
+        self.assertEqual((len(g.hands[0]), g.current_player), (5, 0))
+
     def test_bots_finish_under_house_rules(self):
         for seed in range(200):
             g = play_game([make_agent("heuristic"), make_agent("random")], seed=seed, starter=seed % 2, rules=HOUSE)

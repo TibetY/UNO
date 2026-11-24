@@ -237,6 +237,22 @@ describe("house rules", () => {
       expect(all(g)).toEqual(buildDeck(4).sort());
     }
   });
+  it("plus ends turn: after a + card the opponent plays next", () => {
+    for (const [rule, next] of [[false, 0], [true, 1]] as const) {
+      const g = setup(["red:draw2", "yellow:1"], ["green:1"], "red:2", { rules: { plusEndsTurn: rule } });
+      g.step(play("red:draw2"));
+      expect([g.hands[1].length, g.current]).toEqual([3, next]);
+    }
+    // After accepting a stacked penalty, the one who accepted plays next.
+    const g = setup(["red:draw2", "yellow:1"], ["blue:draw2", "green:1"], "red:2", { rules: { stackDraws: true, plusEndsTurn: true } });
+    g.step(play("red:draw2"));
+    g.step(play("blue:draw2"));
+    expect([g.hands[0].length, g.current]).toEqual([5, 0]);
+    // A custom card set to "player goes again" still does.
+    const c = setup(["custom", "yellow:1"], ["green:1"], "red:2", { rules: { customCards: 2, customSkip: true, customDraw: 3, plusEndsTurn: true } });
+    c.step(play("custom", "blue"));
+    expect([c.hands[1].length, c.current]).toEqual([4, 0]);
+  });
   it("bots finish games and conserve cards under house rules", () => {
     for (let s = 0; s < 200; s++) {
       const g = playGame([AGENTS.heuristic(), AGENTS.random()], s, s % 2, house);
@@ -269,10 +285,10 @@ describe("simulation", () => {
     expect(Math.abs(g.winRate[0] - 0.5)).toBeLessThan(0.04);
     expect(g.turnsMean).toBeGreaterThan(28);
     expect(g.turnsMean).toBeLessThan(36);
-    // Python, C House Rules (--rules c-house): heuristic vs greedy ~49%, ~29 turns.
+    // Python, C House Rules (--rules c-house): heuristic vs greedy ~49%, ~36 turns.
     const h = summarize(await runMatch({ p0: "heuristic", p1: "greedy", games: 3000, seed: 3, rules: HOUSE_RULES }));
     expect(Math.abs(h.winRate[0] - 0.49)).toBeLessThan(0.04);
-    expect(h.turnsMean).toBeGreaterThan(25);
-    expect(h.turnsMean).toBeLessThan(33);
+    expect(h.turnsMean).toBeGreaterThan(32);
+    expect(h.turnsMean).toBeLessThan(40);
   });
 });

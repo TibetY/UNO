@@ -18,6 +18,9 @@ House rules (off by default, see ``Rules``):
   * custom_cards: adds blank custom cards to the deck. What they do is set by
     custom_color (choose a color), custom_skip (the player goes again) and
     custom_draw (the opponent draws N; stacks only on another custom card).
+  * plus_ends_turn: after a +2/+4/custom pick-up card your turn is over: the
+    opponent draws (or stacks) and then plays. (Officially, in two-player the
+    one who played it goes again.)
   * number_finish: you can only go out on a number card. An action card
     (Skip, Reverse, +2, wilds) can't be your last card.
 """
@@ -88,6 +91,7 @@ class Rules:
     multi_play: bool = False
     stack_draws: bool = False
     number_finish: bool = False
+    plus_ends_turn: bool = False  # after a + card the opponent plays next
     custom_cards: int = 0       # blank custom cards in the deck
     custom_color: bool = True   # custom card: player picks the color
     custom_skip: bool = False   # custom card: player goes again
@@ -164,6 +168,7 @@ class Game:
         self.pending_draw = 0
         self._offender: Optional[int] = None
         self._can_challenge = False
+        self._penalty_keeps_turn = True  # does the dealer of the penalty play again?
         self._wd4_was_illegal = False
         # The batch of same-rank cards being played this turn.
         self._batch_rank: Optional[Rank] = None
@@ -438,6 +443,8 @@ class Game:
                 self.pending_draw = 0
                 self._finish(p, "out_of_cards")
                 return
+            self._penalty_keeps_turn = (not self.rules.plus_ends_turn
+                                        or (rank is Rank.CUSTOM and self.rules.custom_skip))
             self._can_challenge = (rank is Rank.WILD_DRAW_FOUR and self.rules.allow_wd4_challenge
                                    and not self._batch_is_response)
             self._wd4_was_illegal = self._batch_illegal_wd4
@@ -448,7 +455,7 @@ class Game:
                 return
             self._draw(opp, self.pending_draw)
             self.pending_draw = 0
-            self._end_turn(p)
+            self._end_turn(p if self._penalty_keeps_turn else opp)
             return
         if won:
             self._finish(p, "out_of_cards")
@@ -462,7 +469,7 @@ class Game:
         if action.type is ActionType.ACCEPT:
             self._log("accept", player=victim)
             self._draw(victim, owed)
-            self._end_turn(offender)
+            self._end_turn(offender if self._penalty_keeps_turn else victim)
             return
         self.stats.challenges[victim] += 1
         success = self._wd4_was_illegal
@@ -473,7 +480,7 @@ class Game:
             self._end_turn(victim)
         else:
             self._draw(victim, owed + 2)
-            self._end_turn(offender)
+            self._end_turn(offender if self._penalty_keeps_turn else victim)
 
     # ---------------------------------------------------------------- scoring
     def score(self) -> int:
