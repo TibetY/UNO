@@ -121,7 +121,9 @@ class HeuristicAgent(Agent):
         counts = Counter(c.color for c in hand if c.color is not None)
         weak = self._opp_weak_colors(obs)
         def score(col: Color) -> float:
-            return counts.get(col, 0) * 2 + weak.get(col.value, 0) + self.rng.random() * 0.01
+            # Our own cards decide: pick the color we hold most of. Colors the
+            # opponent seems to be out of (they drew on them) only break ties.
+            return counts.get(col, 0) * 10 + min(weak.get(col.value, 0), 3) + self.rng.random() * 0.01
         return max(allowed, key=score)
 
     def act(self, obs, legal):

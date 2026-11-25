@@ -113,7 +113,9 @@ export class HeuristicAgent extends BaseAgent {
     let best: Color = allowed[0];
     let bestScore = -Infinity;
     for (const c of allowed) {
-      const s = (counts.get(c) ?? 0) * 2 + (weak.get(c) ?? 0) + this.rng.next() * 0.01;
+      // Our own cards decide: pick the color we hold most of. Colors the opponent
+      // seems to be out of (they drew on them) only break ties.
+      const s = (counts.get(c) ?? 0) * 10 + Math.min(weak.get(c) ?? 0, 3) + this.rng.next() * 0.01;
       if (s > bestScore) [best, bestScore] = [c, s];
     }
     return best;
