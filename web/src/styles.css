@@ -167,7 +167,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   min-height: calc(var(--cw) * 1.48 + 14px); padding: 30px 10px 0; }
 .hand-small { min-height: calc(var(--cw) * .78 * 1.48 + 14px); padding-top: 14px; }
 /* Slots carry the motion (gliding, flying in); the card inside carries the lift. */
-.hand .slot { margin-left: var(--overlap, 6px); flex: none; transition: margin .3s ease; will-change: transform; }
+.hand .slot { margin-left: var(--overlap, 6px); flex: none; will-change: transform; }
 .hand .slot:first-child { margin-left: 0; }
 /* Big hands: rows. Each lower row overlaps the one behind it, which keeps its
    top (corner index and the top of the emblem) in view. */

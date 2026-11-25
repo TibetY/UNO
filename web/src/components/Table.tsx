@@ -451,11 +451,12 @@ function Hand({ v, seat, small, cardState, onTap }: {
       const old = newGame ? undefined : before!.pos.get(it.key);
       if (old) {
         if (Math.abs(old.x - p.x) < 0.5 && Math.abs(old.y - p.y) < 0.5) return;
-        // Moved: glide from where it is on screen right now.
+        // Moved: glide from where it was. If it was already gliding, start from
+        // where it is on screen right now (its old spot plus the glide so far).
         const visual = el.getBoundingClientRect();
         el.getAnimations().forEach((a) => a.cancel());
-        const dx = visual.left - (hostRect.left + p.x);
-        const dy = visual.top - (hostRect.top + p.y);
+        const dx = (old.x - p.x) + (visual.left - (hostRect.left + p.x));
+        const dy = (old.y - p.y) + (visual.top - (hostRect.top + p.y));
         el.animate(
           [{ transform: `translate(${dx}px, ${dy}px) scale(${visual.width / el.offsetWidth || 1})` }, { transform: "none" }],
           { duration: SHIFT_MS, easing: EASE },
