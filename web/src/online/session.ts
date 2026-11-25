@@ -365,6 +365,7 @@ export class GuestSession extends Session {
       const r = view.rules as Partial<TableView["rules"]>;
       view.rules = {
         multiPlay: !!r.multiPlay, stackDraws: !!r.stackDraws, numberFinish: !!r.numberFinish,
+        mustChangeColor: !!r.mustChangeColor,
         customColor: r.customColor !== false, customSkip: !!r.customSkip,
         customDraw: Math.max(0, Math.min(99, Math.floor(Number(r.customDraw) || 0))),
       };

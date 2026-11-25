@@ -32,6 +32,12 @@ function colorCounts(hand: readonly CardId[]) {
   return counts;
 }
 
+/** Colors on offer for this card (mustChangeColor can rule one out). */
+function allowedColors(ps: { card: CardId; color?: Color }[], card: CardId): Color[] {
+  const cs = COLORS.filter((c) => ps.some((a) => a.card === card && a.color === c));
+  return cs.length ? cs : [...COLORS];
+}
+
 /** Uniformly random legal action. */
 export class RandomAgent extends BaseAgent {
   readonly name = "random";
@@ -55,8 +61,9 @@ export class GreedyAgent extends BaseAgent {
     const rest = [...obs.hand];
     rest.splice(rest.indexOf(wild), 1);
     const counts = colorCounts(rest);
-    const top = Math.max(0, ...counts.values());
-    const best = COLORS.filter((c) => (counts.get(c) ?? 0) === top);
+    const allowed = allowedColors(ps, wild);
+    const top = Math.max(0, ...allowed.map((c) => counts.get(c) ?? 0));
+    const best = allowed.filter((c) => (counts.get(c) ?? 0) === top);
     const color = this.rng.pick(best);
     return ps.find((a) => a.card === wild && a.color === color)!;
   }
@@ -98,14 +105,14 @@ export class HeuristicAgent extends BaseAgent {
     return weak;
   }
 
-  private chooseColor(obs: Observation, exclude: CardId): Color {
+  private chooseColor(obs: Observation, exclude: CardId, allowed: readonly Color[] = COLORS): Color {
     const hand = [...obs.hand];
     hand.splice(hand.indexOf(exclude), 1);
     const counts = colorCounts(hand);
     const weak = this.oppWeak(obs);
-    let best: Color = COLORS[0];
+    let best: Color = allowed[0];
     let bestScore = -Infinity;
-    for (const c of COLORS) {
+    for (const c of allowed) {
       const s = (counts.get(c) ?? 0) * 2 + (weak.get(c) ?? 0) + this.rng.next() * 0.01;
       if (s > bestScore) [best, bestScore] = [c, s];
     }
@@ -119,7 +126,7 @@ export class HeuristicAgent extends BaseAgent {
       const stack = ps[0];
       if (stack) {
         if (!stack.color) return stack;
-        const col = this.chooseColor(obs, stack.card);
+        const col = this.chooseColor(obs, stack.card, allowedColors(ps, stack.card));
         return ps.find((a) => a.card === stack.card && a.color === col)!;
       }
       return legal.some((a) => a.type === "challenge") ? this.challenge(obs, legal) : find(legal, "accept");
@@ -131,7 +138,7 @@ export class HeuristicAgent extends BaseAgent {
       if (!isColorless(parseCard(next.card).rank)) return next;
       if (obs.hand.length > 3 && obs.opponentHandSize > 2) return find(legal, "done");
       if (!next.color) return next;
-      const col = this.chooseColor(obs, next.card);
+      const col = this.chooseColor(obs, next.card, allowedColors(ps, next.card));
       return ps.find((a) => a.card === next.card && a.color === col)!;
     }
     if (!ps.length) return legal[0];
@@ -169,7 +176,7 @@ export class HeuristicAgent extends BaseAgent {
     if (obs.phase === "turn" && bestV < -50) return find(legal, "draw");
     if (obs.phase === "turn" && isColorless(parseCard(best.card).rank) && hand.length > 4 && !oppLow) return find(legal, "draw");
     if (isColorless(parseCard(best.card).rank) && best.color) {
-      const col = this.chooseColor(obs, best.card);
+      const col = this.chooseColor(obs, best.card, allowedColors(ps, best.card));
       return ps.find((a) => a.card === best.card && a.color === col)!;
     }
     return best;

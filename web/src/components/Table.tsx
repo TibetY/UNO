@@ -106,7 +106,23 @@ export function Table({ view: v0, onActions, busy, status, seatExtra, gameOverAc
     send(cards.map((card) => ({ type: "play", card })));
     setSelected([]);
   };
+  /** The color the picker can't offer (mustChangeColor): the one active before the first wild. */
+  const blockedColor = (() => {
+    if (!wildChain || !v.rules.mustChangeColor) return null;
+    if (picksColor(wildChain[0])) {
+      const offered = new Set(v.legal.filter((a) => a.type === "play" && a.card === wildChain[0]).map((a) => (a as { color?: Color }).color));
+      return COLORS.find((c) => !offered.has(c)) ?? null;
+    }
+    let c = v.color;
+    for (const card of wildChain) {
+      if (picksColor(card)) break;
+      const own = parseCard(card).color;
+      if (own) c = own;
+    }
+    return c;
+  })();
   const chooseColor = (color: Color) => {
+    if (color === blockedColor) return;
     const chain = wildChain ?? [];
     setWildChain(null);
     setSelected([]);
@@ -238,7 +254,9 @@ export function Table({ view: v0, onActions, busy, status, seatExtra, gameOverAc
               <h2>Choose a color</h2>
               <div className="swatches">
                 {COLORS.map((c) => (
-                  <button key={c} className={`swatch c-${c}`} aria-label={cap(c)} onClick={() => chooseColor(c)} />
+                  <button key={c} className={`swatch c-${c}`} disabled={c === blockedColor}
+                    aria-label={cap(c) + (c === blockedColor ? " (already the color)" : "")}
+                    title={c === blockedColor ? "It's already this color" : undefined} onClick={() => chooseColor(c)} />
                 ))}
               </div>
               <button className="btn ghost" onClick={() => setWildChain(null)}>Cancel</button>

@@ -278,6 +278,24 @@ describe("house rules", () => {
     g.timeout();
     expect([g.current, g.hands[0].length]).toEqual([1, 2]);
   });
+  it("must change color: a wild can't pick the active color", () => {
+    const g = setup(["wild", "wild4", "yellow:1"], ["green:1"], "red:5", { rules: { mustChangeColor: true, multiPlay: true } });
+    const colors = (card: string) => g.legalActions().filter((x) => x.type === "play" && x.card === card).map((x) => (x as { color?: string }).color);
+    expect(colors("wild")).toEqual(["yellow", "green", "blue"]);
+    expect(colors("wild4")).toEqual(["yellow", "green", "blue"]);
+    // Off: all four.
+    const og = setup(["wild", "yellow:1"], ["green:1"], "red:5");
+    expect(og.legalActions().filter((x) => x.type === "play" && x.card === "wild").length).toBe(4);
+  });
+  it("must change color: several wilds at once can all pick the same new color", () => {
+    const g = setup(["wild", "wild", "yellow:1"], ["green:1"], "red:5", { rules: { mustChangeColor: true, multiPlay: true } });
+    g.step(play("wild", "blue"));
+    expect(g.phase).toBe("multi");
+    const second = g.legalActions().filter((x) => x.type === "play").map((x) => (x as { color?: string }).color);
+    expect(second).toEqual(["yellow", "green", "blue"]); // still measured from red, so blue is fine
+    g.step(play("wild", "blue"));
+    expect([g.color, g.current]).toEqual(["blue", 1]);
+  });
   it("bots finish games and conserve cards under house rules", () => {
     for (let s = 0; s < 200; s++) {
       const g = playGame([AGENTS.heuristic(), AGENTS.random()], s, s % 2, house);

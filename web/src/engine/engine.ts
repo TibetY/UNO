@@ -20,6 +20,9 @@
  *  - plusEndsTurn: after a +2/+4/custom pick-up card your turn is over: the
  *    opponent draws (or stacks) and then plays. (Officially, in two-player the
  *    one who played it goes again.)
+ *  - mustChangeColor: a card that picks a color (Wild, +4, custom) must pick a
+ *    different color from the one that was active before it (several wilds
+ *    played together all count from the color before the first).
  *  - numberFinish: you can only go out on a number card. An action card
  *    (Skip, Reverse, +2, wilds) can't be your last card.
  */
@@ -50,6 +53,8 @@ export interface Rules {
   numberFinish: boolean;
   /** After a + card the opponent plays next (instead of the player going again). */
   plusEndsTurn: boolean;
+  /** A color-picking card can't pick the color that's already active. */
+  mustChangeColor: boolean;
   /** Blank custom cards in the deck. */
   customCards: number;
   /** Custom card: the player picks the color. */
@@ -73,6 +78,7 @@ export const DEFAULT_RULES: Rules = {
   stackDraws: false,
   numberFinish: false,
   plusEndsTurn: false,
+  mustChangeColor: false,
   customCards: 0,
   customColor: true,
   customSkip: false,
@@ -92,6 +98,7 @@ export const HOUSE_RULES: Rules = {
   stackDraws: true,
   numberFinish: true,
   plusEndsTurn: true,
+  mustChangeColor: true,
   allowWd4Challenge: false,
   customCards: 2,
 };
@@ -196,6 +203,8 @@ export class Game {
   private batchRank: string | null = null;
   private batchCount = 0;
   private batchIsResponse = false;
+  /** The active color before this turn's cards (for mustChangeColor). */
+  private batchStartColor: Color | null = null;
   private batchIllegalWd4 = false;
 
   constructor(opts: { seed: number; starter?: number; rules?: Partial<Rules> }) {
@@ -306,9 +315,11 @@ export class Game {
   }
 
   private playActions(card: CardId): Action[] {
-    return this.picksColor(card)
-      ? COLORS.map((color) => ({ type: "play", card, color }) as Action)
-      : [{ type: "play", card }];
+    if (!this.picksColor(card)) return [{ type: "play", card }];
+    // mustChangeColor: not the color that was active before this turn's cards.
+    const before = this.phase === "multi" ? this.batchStartColor : this.color;
+    return COLORS.filter((c) => !(this.rules.mustChangeColor && c === before))
+      .map((color) => ({ type: "play", card, color }) as Action);
   }
 
   /** With numberFinish, an action card can't be a player's last card. */
@@ -435,6 +446,7 @@ export class Game {
     if (this.phase !== "multi") {
       // First card of this turn's batch.
       this.batchIsResponse = this.phase === "respond";
+      this.batchStartColor = this.color;
       this.batchIllegalWd4 = rank === "wild4" && !this.batchIsResponse && this.hasColor(p);
       this.batchRank = rank;
       this.batchCount = 0;

@@ -21,6 +21,8 @@ House rules (off by default, see ``Rules``):
   * plus_ends_turn: after a +2/+4/custom pick-up card your turn is over: the
     opponent draws (or stacks) and then plays. (Officially, in two-player the
     one who played it goes again.)
+  * must_change_color: a card that picks a color (Wild, +4, custom) must pick a
+    different color from the one that was active before it.
   * number_finish: you can only go out on a number card. An action card
     (Skip, Reverse, +2, wilds) can't be your last card.
 """
@@ -92,6 +94,7 @@ class Rules:
     stack_draws: bool = False
     number_finish: bool = False
     plus_ends_turn: bool = False  # after a + card the opponent plays next
+    must_change_color: bool = False  # a color-picking card can't pick the active color
     custom_cards: int = 0       # blank custom cards in the deck
     custom_color: bool = True   # custom card: player picks the color
     custom_skip: bool = False   # custom card: player goes again
@@ -174,6 +177,7 @@ class Game:
         self._batch_rank: Optional[Rank] = None
         self._batch_count = 0
         self._batch_is_response = False
+        self._batch_start_color: Optional[Color] = None
         self._batch_illegal_wd4 = False
 
         self._deal()
@@ -286,9 +290,12 @@ class Game:
         return card.rank.is_wild or (card.rank is Rank.CUSTOM and self.rules.custom_color)
 
     def _play_actions(self, card: Card) -> List[Action]:
-        if self._picks_color(card):
-            return [Action(ActionType.PLAY, card, c) for c in COLORS]
-        return [Action(ActionType.PLAY, card)]
+        if not self._picks_color(card):
+            return [Action(ActionType.PLAY, card)]
+        # must_change_color: not the color that was active before this turn's cards.
+        before = self._batch_start_color if self.phase is Phase.MULTI else self.current_color
+        return [Action(ActionType.PLAY, card, c) for c in COLORS
+                if not (self.rules.must_change_color and c == before)]
 
     # ------------------------------------------------------------- public API
     def _finish_ok(self, p: int, card: Card) -> bool:
@@ -395,6 +402,7 @@ class Game:
         if self.phase is not Phase.MULTI:
             # First card of this turn's batch.
             self._batch_is_response = self.phase is Phase.RESPOND
+            self._batch_start_color = self.current_color
             self._batch_illegal_wd4 = (card.rank is Rank.WILD_DRAW_FOUR
                                        and not self._batch_is_response and self._has_color(p))
             self._batch_rank = card.rank

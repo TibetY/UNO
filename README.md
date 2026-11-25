@@ -82,7 +82,7 @@ python -m unittest
 
 Rule variants are flags on every command: `--hand-size`, `--draw-until-playable`,
 `--no-play-drawn`, `--wd4-restricted`, `--no-challenge`, `--multi-play`, `--stack-draws`,
-`--number-finish`, `--plus-ends-turn`, `--custom-cards`, `--custom-draw`, `--custom-skip`,
+`--number-finish`, `--plus-ends-turn`, `--must-change-color`, `--custom-cards`, `--custom-draw`, `--custom-skip`,
 `--custom-no-color`, `--rules og|c-house`, `--house` and `--max-turns`.
 
 ## Rules implemented (official 2-player rules)
@@ -112,6 +112,7 @@ In the web app, pick a set under **Rules**. Changing any option shows "Custom". 
 - **Custom card** (`--custom-cards N`): a card with a black border and a blank white face. You set what it does before the game starts: the opponent picks up N cards (`--custom-draw`, default 10), the player chooses the color (on by default; `--custom-no-color` turns it off), and/or the player goes again (`--custom-skip`). It can be played on anything. If it doesn't choose a color, the color stays as it was. A custom card that makes the opponent pick up can only be stacked on another custom card. It's worth 50 points, and it's an action card, so you can't go out on it.
 - **No Wild Draw Four challenges** (`--no-challenge`): under the official rules you can challenge a +4 you think was played while the player still had a card of the active color. C House Rules turns this off: a +4 can always be played, and the other player draws (or stacks). In the web app this is the checkbox "Wild Draw Four can be challenged".
 - **No extra turn after a + card** (`--plus-ends-turn`): officially, in two-player, the person who plays a +2 or +4 goes again. With this rule their turn ends: the opponent draws (or stacks), then plays. This also covers custom cards that make you pick up, unless the custom card is set to "player goes again".
+- **Must change the color** (`--must-change-color`): a Wild, +4 or custom card that picks a color can't pick the color that's already active. Several wilds played together all count from the color before the first, so they can all pick the same new color.
 - **Finish on a number** (`--number-finish`): you can only go out on a number card. An action card (Skip, Reverse, +2, +4 or a wild) can't be your last card; if it's all you have left, you draw. A +4 played as a stack can't be challenged. A +4 that starts a penalty can still be challenged: if the challenge succeeds, the player who played it draws the whole total; if it fails, the challenger draws the total plus 2.
 
 ## Writing your own bot

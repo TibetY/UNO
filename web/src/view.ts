@@ -6,7 +6,7 @@ export interface TableView {
   /** Changes whenever a new game is dealt. */
   gameId: string;
   rules: {
-    multiPlay: boolean; stackDraws: boolean; numberFinish: boolean;
+    multiPlay: boolean; stackDraws: boolean; numberFinish: boolean; mustChangeColor: boolean;
     customColor: boolean; customSkip: boolean; customDraw: number;
   };
   /** Seat the viewer controls, or null when only watching. */
@@ -49,6 +49,7 @@ export function viewFromGame(
     gameId: `${g.seed}:${g.uid}`,
     rules: {
       multiPlay: g.rules.multiPlay, stackDraws: g.rules.stackDraws, numberFinish: g.rules.numberFinish,
+      mustChangeColor: g.rules.mustChangeColor,
       customColor: g.rules.customColor, customSkip: g.rules.customSkip, customDraw: g.rules.customDraw,
     },
     you: o.you,

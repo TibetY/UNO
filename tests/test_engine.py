@@ -277,6 +277,17 @@ class HouseRuleTests(unittest.TestCase):
         g.step(Action(ActionType.PLAY, Card(Rank.DRAW_TWO, B)))
         self.assertEqual((len(g.hands[0]), g.current_player), (5, 0))
 
+    def test_must_change_color(self):
+        g = setup([Card(Rank.WILD), Card(Rank.ONE, Y)], [Card(Rank.ONE, G)], Card(Rank.FIVE, R),
+                  rules=Rules(must_change_color=True))
+        colors = [a.color for a in g.legal_actions() if a.type is ActionType.PLAY and a.card == Card(Rank.WILD)]
+        self.assertEqual(colors, [Y, G, B])
+        for seed in range(100):
+            rules = Rules(multi_play=True, stack_draws=True, number_finish=True, plus_ends_turn=True,
+                          must_change_color=True, allow_wd4_challenge=False, custom_cards=2)
+            game = play_game([make_agent("heuristic"), make_agent("greedy")], seed=seed, starter=seed % 2, rules=rules)
+            self.assertTrue(game.is_over)
+
     def test_bots_finish_under_house_rules(self):
         for seed in range(200):
             g = play_game([make_agent("heuristic"), make_agent("random")], seed=seed, starter=seed % 2, rules=HOUSE)

@@ -363,7 +363,10 @@ html.immersive body { position: fixed; inset: 0; width: 100%; }
 .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 14px 0; }
 .swatch { aspect-ratio: 1; border-radius: 14px; border: 3px solid #fbfbf8; background: var(--c);
   box-shadow: 0 6px 14px rgba(0,0,0,.35); transition: transform .12s; }
-.swatch:hover { transform: translateY(-3px) scale(1.04); }
+.swatch:hover:not(:disabled) { transform: translateY(-3px) scale(1.04); }
+/* The color it already is (must change color): crossed out and not tappable. */
+.swatch:disabled { cursor: not-allowed; opacity: .45; filter: saturate(.6);
+  background-image: linear-gradient(135deg, transparent 46%, #fbfbf8 46%, #fbfbf8 54%, transparent 54%); }
 .finale { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .finale-label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
 .reveal { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px; margin: 0 0 18px; --cw: 46px; }

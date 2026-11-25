@@ -42,12 +42,18 @@ class RandomAgent(Agent):
         return self.rng.choice(list(legal))
 
 
-def _best_color(hand: Sequence[Card], rng: random.Random) -> Color:
-    counts = Counter(c.color for c in hand if c.color is not None)
+def _best_color(hand: Sequence[Card], rng: random.Random, allowed: Sequence[Color] = COLORS) -> Color:
+    """The color we hold most of, among the colors we're allowed to pick."""
+    counts = Counter(c.color for c in hand if c.color in allowed)
     if not counts:
-        return rng.choice(COLORS)
+        return rng.choice(list(allowed))
     top = max(counts.values())
-    return rng.choice([c for c in COLORS if counts.get(c, 0) == top])
+    return rng.choice([c for c in allowed if counts.get(c, 0) == top])
+
+
+def _allowed_colors(plays: Sequence[Action], card: Card) -> List[Color]:
+    """Colors on offer for this card (must_change_color can rule one out)."""
+    return [c for c in COLORS if any(a.card == card and a.color == c for a in plays)]
 
 
 class GreedyAgent(Agent):
@@ -64,9 +70,10 @@ class GreedyAgent(Agent):
         colored = [a for a in plays if not a.card.rank.is_colorless]
         if colored:
             return max(colored, key=lambda a: a.card.points)
-        color = _best_color([c for c in obs.hand if c != plays[0].card], self.rng)
         order = {Rank.WILD: 0, Rank.CUSTOM: 1, Rank.WILD_DRAW_FOUR: 2}  # prefer the plain wild
         wild = min(plays, key=lambda a: order[a.card.rank])
+        color = _best_color([c for c in obs.hand if c != plays[0].card], self.rng,
+                            _allowed_colors(plays, wild.card) or COLORS)
         if wild.color is None:  # a custom card that doesn't pick a color
             return wild
         return next(a for a in plays if a.card == wild.card and a.color == color)
@@ -108,14 +115,14 @@ class HeuristicAgent(Agent):
                 weak[color] += 1
         return weak
 
-    def _choose_color(self, obs: Observation, exclude: Card) -> Color:
+    def _choose_color(self, obs: Observation, exclude: Card, allowed: Sequence[Color] = COLORS) -> Color:
         hand = list(obs.hand)
         hand.remove(exclude)
         counts = Counter(c.color for c in hand if c.color is not None)
         weak = self._opp_weak_colors(obs)
         def score(col: Color) -> float:
             return counts.get(col, 0) * 2 + weak.get(col.value, 0) + self.rng.random() * 0.01
-        return max(COLORS, key=score)
+        return max(allowed, key=score)
 
     def act(self, obs, legal):
         plays = [a for a in legal if a.type is ActionType.PLAY]
@@ -126,7 +133,7 @@ class HeuristicAgent(Agent):
             if stack is not None:
                 if stack.color is None:
                     return stack
-                col = self._choose_color(obs, stack.card)
+                col = self._choose_color(obs, stack.card, _allowed_colors(plays, stack.card))
                 return next(a for a in plays if a.card == stack.card and a.color == col)
             if any(a.type is ActionType.CHALLENGE for a in legal):
                 return self._challenge(obs, legal)
@@ -142,7 +149,7 @@ class HeuristicAgent(Agent):
                 return next(a for a in legal if a.type is ActionType.DONE)
             if nxt.color is None:
                 return nxt
-            col = self._choose_color(obs, nxt.card)
+            col = self._choose_color(obs, nxt.card, _allowed_colors(plays, nxt.card))
             return next(a for a in plays if a.card == nxt.card and a.color == col)
         if not plays:
             return legal[0]
@@ -192,7 +199,7 @@ class HeuristicAgent(Agent):
                 and len(hand) > 4 and not opp_low):
             return next(a for a in legal if a.type is ActionType.DRAW)
         if best.card.rank.is_colorless and best.color is not None:
-            col = self._choose_color(obs, best.card)
+            col = self._choose_color(obs, best.card, _allowed_colors(plays, best.card))
             return next(a for a in plays if a.card == best.card and a.color == col)
         return best
 
