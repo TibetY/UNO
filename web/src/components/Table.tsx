@@ -4,7 +4,7 @@ import type { Action, GameEvent } from "../engine/engine";
 import type { TableView } from "../view";
 import { Card, CardBack, CustomCardContext } from "./Card";
 import {
-  DEAL_STAGGER, EASE, FLIGHT_MS, MotionContext, PLAY_MS, PLAY_STAGGER, SHIFT_MS, drawStagger,
+  DEAL_STAGGER, EASE, FLIGHT_MS, MotionContext, PLAY_MS, PLAY_STAGGER, SHIFT_MS, dealAnimationMs, drawStagger,
   type TableMotion, flyFrom, reducedMotion,
 } from "../anim";
 
@@ -131,6 +131,16 @@ export function Table({ view: v0, onActions, busy, status, seatExtra, gameOverAc
   };
 
   const over = v.endReason !== null;
+  // Let the winning card(s) land, and any penalty cards be dealt, before the
+  // game-over box covers the table.
+  const [showOver, setShowOver] = useState(false);
+  useEffect(() => {
+    if (!over) return setShowOver(false);
+    if (reducedMotion()) return setShowOver(true);
+    const t = window.setTimeout(() => setShowOver(true), dealAnimationMs(finalMove(v).events, 7) + 700);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [over, v.gameId]);
   const draw = find("draw");
   const pass = find("pass");
   const done = find("done");
@@ -228,7 +238,7 @@ export function Table({ view: v0, onActions, busy, status, seatExtra, gameOverAc
           </div>
         )}
 
-        {over && !hideGameOver && <GameOver v={v} actions={gameOverActions} />}
+        {over && !hideGameOver && showOver && <GameOver v={v} actions={gameOverActions} />}
       </div>
      </CustomCardContext.Provider>
     </MotionContext.Provider>
@@ -507,8 +517,22 @@ function rotation(e: GameEvent, i: number) {
   return (hash(`${e.t}${e.card}${i}`) % 25) - 12;
 }
 
+/** The winner's last move: the cards they went out with, and any penalty that followed. */
+function finalMove(v: TableView): { cards: CardId[]; events: GameEvent[] } {
+  const cards: CardId[] = [];
+  let start = v.events.length;
+  for (let i = v.events.length - 1; i >= 0; i--) {
+    const e = v.events[i];
+    if (e.event === "game_over" || (e.event === "draw" && !e.voluntary && cards.length === 0)) { start = i; continue; }
+    if (e.event === "play" && e.player === v.winner && e.card) { cards.unshift(e.card); start = i; continue; }
+    break;
+  }
+  return { cards, events: v.events.slice(start) };
+}
+
 function GameOver({ v, actions }: { v: TableView; actions?: ReactNode }) {
   const loser = v.winner === null ? null : 1 - v.winner;
+  const finale = v.winner === null ? [] : finalMove(v).cards;
   let title = "Draw";
   if (v.winner !== null) title = v.you === v.winner ? "You win!" : `${playerName(v, v.winner)} wins`;
   const loserHand = loser !== null ? v.hands[loser] : null;
@@ -522,8 +546,17 @@ function GameOver({ v, actions }: { v: TableView; actions?: ReactNode }) {
             : <>+{v.points} points from the cards left in {loser === v.you ? "your" : `${v.names[loser!]}'s`} hand · {v.turn} turns<br />
                 <small>Cards drawn: {playerName(v, 0)} {v.drawn[0]} · {playerName(v, 1)} {v.drawn[1]}</small></>}
         </p>
-        {loserHand && (
-          <div className="reveal">{sortHand(loserHand).map((c, i) => <Card key={i} id={c} />)}</div>
+        {finale.length > 0 && (
+          <div className="finale">
+            <span className="finale-label">{v.you === v.winner && !v.sharedDevice ? "You went out with" : `${playerName(v, v.winner!)} went out with`}</span>
+            <div className="reveal">{finale.map((c, i) => <Card key={i} id={c} chosen={parseCard(c).color === null && i === finale.length - 1 ? v.color : null} />)}</div>
+          </div>
+        )}
+        {loserHand && loserHand.length > 0 && (
+          <div className="finale">
+            <span className="finale-label">{loser === v.you && !v.sharedDevice ? "Left in your hand" : `Left in ${playerName(v, loser!)}'s hand`}</span>
+            <div className="reveal">{sortHand(loserHand).map((c, i) => <Card key={i} id={c} />)}</div>
+          </div>
         )}
         <div className="row">{actions}</div>
       </div>
