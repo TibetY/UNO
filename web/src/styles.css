@@ -277,7 +277,9 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 
 /* ---------------- reactions ---------------- */
 .seat-info-wrap { position: relative; display: flex; align-items: center; gap: 8px; }
+/* The name tag is centred on its own; the reaction button hangs off its right side. */
 .react-btn {
+  position: absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%);
   width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,.18); background: rgba(0,0,0,.28);
   font-size: 18px; line-height: 1; display: grid; place-items: center; padding: 0;
 }
@@ -436,6 +438,7 @@ html.immersive body { position: fixed; inset: 0; width: 100%; }
   .seat-top .seat-info-wrap { order: 2; }       /* opponent's name to the right of their cards */
   .seat-bottom .seat-info-wrap { order: -1; }   /* your name to the left of your cards */
   .react-tray { left: 0; transform: none; grid-template-columns: repeat(4, 36px); }
+  .react-btn { position: static; transform: none; }  /* sideways the tag sits at the left edge: keep the button beside it */
   .react-tray button { width: 36px; height: 36px; font-size: 21px; }
   /* Sideways the deck sits on the left, so both reactions use the open right side. */
   .react-bubble { font-size: 36px; }
