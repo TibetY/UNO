@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AGENT_BLURBS, AGENT_NAMES, type AgentName } from "../engine/agents";
+import { AGENT_BLURBS, AGENT_DISPLAY, AGENT_NAMES, type AgentName } from "../engine/agents";
 import type { Game, GameEvent, Rules } from "../engine/engine";
 import { dealAnimationMs } from "../anim";
-import { cap } from "../engine/cards";
 import { useLocalGame } from "../useLocalGame";
 import { viewFromGame } from "../view";
 import { GameLog, Table } from "./Table";
@@ -100,7 +99,7 @@ export function PlayPage({ rules }: { rules: Rules }) {
     : undefined;
   const view = hotseat
     ? viewFromGame(game, { you: game.isOver || handoff ? null : game.current, names: FRIEND_NAMES })
-    : viewFromGame(game, { you: 0, names: ["You", opponent === "friend" ? "Friend" : cap(opponent)] });
+    : viewFromGame(game, { you: 0, names: ["You", opponent === "friend" ? "Friend" : AGENT_DISPLAY[opponent]] });
   if (hotseat) view.sharedDevice = true;
 
   return (
@@ -126,7 +125,7 @@ export function PlayPage({ rules }: { rules: Rules }) {
           <div className="field">
             <label htmlFor="opp">Opponent</label>
             <select id="opp" value={opponent} onChange={(e) => setOpponent(e.target.value as Opponent)}>
-              {AGENT_NAMES.map((a) => <option key={a} value={a}>{cap(a)} (bot)</option>)}
+              {AGENT_NAMES.map((a) => <option key={a} value={a}>{AGENT_DISPLAY[a]} (bot)</option>)}
               <option value="friend">A friend on this device</option>
             </select>
             <small className="help">{opponent === "friend"

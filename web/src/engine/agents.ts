@@ -197,6 +197,13 @@ export const AGENTS = {
 export type AgentName = keyof typeof AGENTS;
 export const AGENT_NAMES = Object.keys(AGENTS) as AgentName[];
 
+/** Names shown in the app (the ids above stay the same for stats and the CLI). */
+export const AGENT_DISPLAY: Record<AgentName, string> = {
+  random: "Random",
+  greedy: "Greedy",
+  heuristic: "Botty McFly",
+};
+
 export const AGENT_BLURBS: Record<AgentName, string> = {
   random: "Picks any legal move at random",
   greedy: "Always plays if it can, highest points first",
