@@ -262,6 +262,22 @@ describe("house rules", () => {
     og.step(play("wild4", "blue"));
     expect(og.legalActions().map((x) => x.type)).toEqual(["challenge", "accept"]);
   });
+  it("timeout forfeits the turn", () => {
+    // Normal turn: draw one card and play passes, even if it's playable.
+    let g = setup(["blue:1"], ["green:1"], "red:5", { draw: ["red:8"] });
+    g.timeout();
+    expect([g.hands[0].length, g.current, g.events.some((e) => e.event === "timeout")]).toEqual([2, 1, true]);
+    // Owing a penalty: take it.
+    g = setup(["red:draw2", "yellow:1"], ["blue:draw2", "green:1"], "red:2", { rules: { stackDraws: true } });
+    g.step(play("red:draw2"));
+    g.timeout();
+    expect([g.hands[1].length, g.pendingDraw]).toEqual([4, 0]);
+    // Mid multi-play: the turn ends with the cards already played.
+    g = setup(["red:5", "blue:5", "yellow:1"], ["green:1"], "red:2", { rules: { multiPlay: true } });
+    g.step(play("red:5"));
+    g.timeout();
+    expect([g.current, g.hands[0].length]).toEqual([1, 2]);
+  });
   it("bots finish games and conserve cards under house rules", () => {
     for (let s = 0; s < 200; s++) {
       const g = playGame([AGENTS.heuristic(), AGENTS.random()], s, s % 2, house);

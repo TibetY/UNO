@@ -80,6 +80,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .check { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-bottom: 12px; }
 .check input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
 .check input[type=number] { width: 70px; }
+.check select { width: auto; }
 .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; align-items: center; }
 .row .btn { flex: 1; }
 .dialog .row .btn { flex: 0 1 auto; min-width: 140px; }
@@ -128,6 +129,14 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .seat-dot { width: 9px; height: 9px; border-radius: 50%; background: #456; flex: none; }
 .seat.active .seat-dot { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
 .seat.active .seat-info { box-shadow: 0 0 0 2px var(--accent); }
+/* turn timer: a bar along the bottom of the name tag, plus seconds while running */
+.seat-info { position: relative; overflow: hidden; }
+.timer-bar { position: absolute; left: 14px; right: 14px; bottom: 2px; height: 3px; border-radius: 99px; background: rgba(255,255,255,.12); }
+.timer-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--ok); transform-origin: left; transition: transform .1s linear; }
+.timer-bar.idle > span { background: rgba(255,255,255,.28); }
+.timer-bar.low > span { background: var(--danger); }
+.seat-timer { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--ok); }
+.seat-timer.low { color: var(--danger); animation: pulse .8s ease-in-out infinite; }
 .seat-count, .seat-score { background: rgba(255,255,255,.12); padding: 1px 8px; border-radius: 999px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .seat-score { background: rgba(244,180,0,.18); color: var(--accent-hi); font-size: 12px; }
 
@@ -168,8 +177,14 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .hand .card { transition: transform .22s cubic-bezier(.22, .68, .24, 1), filter .2s; }
 .hand-small .card { width: calc(var(--cw) * .78); font-size: calc(var(--cw) * .78); }
 .hand-main .card.playable { cursor: pointer; transform: translateY(-10px); }
-.hand-main .card.playable:hover, .hand-main .card.playable:focus-visible { transform: translateY(-18px); }
-.hand-main .slot:has(.card.playable:hover), .hand-main .slot:has(.card.selected) { z-index: 5; position: relative; }
+/* Lift on hover only with a real mouse: on phones a "hover" sticks after a tap.
+   Picked cards rise but stay in their stacking order, so the card behind them
+   (often its partner, e.g. another 1) stays tappable. */
+@media (hover: hover) {
+  .hand-main .card.playable:hover { transform: translateY(-18px); }
+  .hand-main .slot:has(.card.playable:hover) { z-index: 5; position: relative; }
+}
+.hand-main .card.playable:focus-visible { transform: translateY(-18px); }
 .hand-main .card.selected { cursor: pointer; transform: translateY(-30px); box-shadow: 0 0 0 3px var(--accent), 0 14px 24px rgba(0,0,0,.45); }
 .hand-main .card.dim { filter: brightness(.55) saturate(.7); }
 .hand .card.highlight { transform: translateY(-26px); box-shadow: 0 0 0 2px rgba(255,255,255,.7), 0 14px 24px rgba(0,0,0,.45); }
@@ -269,11 +284,11 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .react-btn.open { box-shadow: 0 0 0 2px var(--accent); }
 .react-tray {
   position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); z-index: 40;
-  display: grid; grid-template-columns: repeat(6, 40px); gap: 2px; padding: 6px; border-radius: 18px;
+  display: grid; grid-template-columns: repeat(4, 44px); gap: 2px; padding: 6px; border-radius: 18px;
   background: var(--panel); border: 1px solid var(--line);
   box-shadow: 0 10px 30px rgba(0,0,0,.5); animation: tray-in .16s ease-out;
 }
-.react-tray button { width: 40px; height: 40px; border: 0; background: none; border-radius: 50%; font-size: 24px; line-height: 1; padding: 0; transition: transform .12s, background .12s; }
+.react-tray button { width: 44px; height: 44px; border: 0; background: none; border-radius: 50%; font-size: 24px; line-height: 1; padding: 0; transition: transform .12s, background .12s; }
 .react-tray button:hover, .react-tray button:focus-visible { background: var(--panel-2); transform: scale(1.18); }
 @keyframes tray-in { from { opacity: 0; transform: translate(-50%, 6px) scale(.96); } }
 /* Reactions sit in open felt: just under the opponent's cards on the left,
@@ -420,7 +435,7 @@ html.immersive body { position: fixed; inset: 0; width: 100%; }
   .seat-top { padding-left: 84px; }            /* clear of the Menu button */
   .seat-top .seat-info-wrap { order: 2; }       /* opponent's name to the right of their cards */
   .seat-bottom .seat-info-wrap { order: -1; }   /* your name to the left of your cards */
-  .react-tray { left: 0; transform: none; grid-template-columns: repeat(6, 36px); }
+  .react-tray { left: 0; transform: none; grid-template-columns: repeat(4, 36px); }
   .react-tray button { width: 36px; height: 36px; font-size: 21px; }
   /* Sideways the deck sits on the left, so both reactions use the open right side. */
   .react-bubble { font-size: 36px; }

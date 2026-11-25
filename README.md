@@ -24,7 +24,9 @@ The app has two tabs:
 - **Play**: play against `random`, `greedy` or `heuristic`, or against a friend on the same device.
 - **Online**: play a friend in real time. One player creates a game and taps **Share invite link**, which opens the phone's share menu (Messages, WhatsApp and so on) or copies the link on a computer. The link opens the Online tab with the code filled in. The other player can also type the 5-character code. Both players need to be on the same site.
 
-During a game, the 😊 button next to your name sends a reaction (😠 😭 😎 😁 😂 🙄 😈 🤬 👎 👍 🍆). Online, your opponent sees it within about half a second. Against a bot, the bot sometimes reacts on its own.
+During a game, the 😊 button next to your name sends a reaction (😭 😂 🙄 🤬 👎 👍 🍆 🗑️). Online, your opponent sees it within about half a second. Against a bot, the bot sometimes reacts on its own.
+
+**Turn timer** (Rules → Turn timer, default 30 seconds, or Off): a bar in each player's name tag shows their time. When it runs out, the turn is forfeited: the player draws a card and play passes, or takes a penalty they owe. Bots aren't timed. Online, the host's device keeps time for both players.
 
 Bot-vs-bot matches and statistics are on the command line (`python -m cardduel simulate`, `tournament`).
 

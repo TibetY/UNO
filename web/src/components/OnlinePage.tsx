@@ -188,6 +188,7 @@ function OnlineGame({ session, onLeave }: { session: AnySession; onLeave: () => 
             busy={s.sending || !s.connected}
             onActions={(as) => session.actMany(as)}
             reactions={s.reactions}
+            timer={s.turnMs > 0 ? { timed: [true, true], total: s.turnMs, clock: s.clock } : undefined}
             onReact={(id) => session.react(id)}
             seatExtra={scoreChips}
             status={s.sending && s.view.current === s.view.you ? "Sending…" : undefined}

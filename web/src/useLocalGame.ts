@@ -65,6 +65,15 @@ export function useLocalGame(delay: (newEvents: readonly GameEvent[], game: Game
     bump();
   }, []);
 
+  /** The human to act ran out of time. */
+  const timeout = useCallback(() => {
+    const g = game.current;
+    if (!g || g.isOver || agents.current[g.current]) return;
+    g.timeout();
+    finishIfOver();
+    bump();
+  }, []);
+
   /** Several of the human's moves in a row (cards picked together). */
   const actMany = useCallback((actions: Action[]) => {
     const g = game.current;
@@ -94,5 +103,5 @@ export function useLocalGame(delay: (newEvents: readonly GameEvent[], game: Game
     return () => window.clearTimeout(t);
   }, [botToMove, paused, version, stepBot, delay]);
 
-  return { game: g, start, act, actMany, stepBot, botToMove };
+  return { game: g, start, act, actMany, timeout, stepBot, botToMove };
 }

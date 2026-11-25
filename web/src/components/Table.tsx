@@ -4,6 +4,7 @@ import type { Action, GameEvent } from "../engine/engine";
 import type { TableView } from "../view";
 import { Card, CardBack, CustomCardContext } from "./Card";
 import { REACTIONS, type Reaction, type ReactionId, reactionEmoji } from "../reactions";
+import type { TurnClock } from "../timer";
 import {
   DEAL_STAGGER, EASE, FLIGHT_MS, MotionContext, PLAY_MS, PLAY_STAGGER, SHIFT_MS, dealAnimationMs, drawStagger,
   type TableMotion, flyFrom, reducedMotion,
@@ -29,6 +30,8 @@ interface Props {
   reactions?: Reaction[];
   /** If set, the player can send reactions. */
   onReact?: (id: ReactionId) => void;
+  /** Turn timer: which seats are timed, and the clock that's running (if any). */
+  timer?: { timed: [boolean, boolean]; clock: TurnClock | null; total: number };
 }
 
 export function playerName(v: TableView, p: number) {
@@ -58,7 +61,7 @@ function canFollow(prev: CardId, next: CardId, multiPlay: boolean): boolean {
   return multiPlay && parseCard(next).rank === p.rank;
 }
 
-export function Table({ view: v0, onActions, busy, status, seatExtra, gameOverActions, hideGameOver, hideHands, reactions, onReact }: Props) {
+export function Table({ view: v0, onActions, busy, status, seatExtra, gameOverActions, hideGameOver, hideHands, reactions, onReact, timer }: Props) {
   const v = hideHands ? { ...v0, hands: [null, null], legal: [] } : v0;
   const [selected, setSelected] = useState<Keyed[]>([]);
   const [wildChain, setWildChain] = useState<CardId[] | null>(null);
@@ -176,7 +179,7 @@ export function Table({ view: v0, onActions, busy, status, seatExtra, gameOverAc
     <MotionContext.Provider value={motion}>
      <CustomCardContext.Provider value={v.rules}>
       <div className="table">
-        <Seat v={v} seat={top} position="top" extra={seatExtra?.[top]} reactions={reactions} />
+        <Seat v={v} seat={top} position="top" extra={seatExtra?.[top]} reactions={reactions} timer={timer} />
 
         <div className="center">
           <div className="pile-wrap">
@@ -220,7 +223,7 @@ export function Table({ view: v0, onActions, busy, status, seatExtra, gameOverAc
           )}
         </div>
 
-        <Seat v={v} seat={v.bottom} position="bottom" extra={seatExtra?.[v.bottom]} reactions={reactions} onReact={onReact}
+        <Seat v={v} seat={v.bottom} position="bottom" extra={seatExtra?.[v.bottom]} reactions={reactions} onReact={onReact} timer={timer}
           cardState={yourTurn ? (k) => {
             const order = selected.findIndex((s) => s.key === k.key);
             if (order >= 0) return { selected: true, order: order + 1 };
@@ -292,10 +295,11 @@ interface CardState {
   order?: number;
 }
 
-function Seat({ v, seat, position, extra, cardState, onTap, reactions, onReact }: {
+function Seat({ v, seat, position, extra, cardState, onTap, reactions, onReact, timer }: {
   v: TableView; seat: number; position: "top" | "bottom"; extra?: ReactNode;
   cardState?: (k: Keyed) => CardState; onTap?: (k: Keyed) => void;
   reactions?: Reaction[]; onReact?: (id: ReactionId) => void;
+  timer?: Props["timer"];
 }) {
   const active = v.endReason === null && v.current === seat;
   const [tray, setTray] = useState(false);
@@ -307,6 +311,9 @@ function Seat({ v, seat, position, extra, cardState, onTap, reactions, onReact }
         <span className="seat-name">{playerName(v, seat)}</span>
         <span className="seat-count" aria-label={`${v.handSizes[seat]} cards`}>{v.handSizes[seat]}</span>
         {extra}
+        {timer?.timed[seat] && v.endReason === null && (
+          <TimerBar total={timer.total} deadline={timer.clock?.seat === seat ? timer.clock.deadline : null} />
+        )}
       </div>
       {onReact && (
         <button className={"react-btn" + (tray ? " open" : "")} aria-label="Send a reaction" aria-expanded={tray}
@@ -474,6 +481,28 @@ function Hand({ v, seat, small, cardState, onTap }: {
   );
 }
 
+/** A thin bar along the bottom of the name tag; it shrinks while this player's clock runs. */
+function TimerBar({ total, deadline }: { total: number; deadline: number | null }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (deadline === null) return;
+    setNow(Date.now());
+    const t = window.setInterval(() => setNow(Date.now()), 100);
+    return () => window.clearInterval(t);
+  }, [deadline]);
+  const left = deadline === null ? total : Math.max(0, deadline - now);
+  const secs = Math.ceil(left / 1000);
+  const low = deadline !== null && left <= 5000;
+  return (
+    <>
+      {deadline !== null && <span className={"seat-timer" + (low ? " low" : "")} aria-label={`${secs} seconds left`}>{secs}s</span>}
+      <span className={"timer-bar" + (deadline === null ? " idle" : "") + (low ? " low" : "")} aria-hidden="true">
+        <span style={{ transform: `scaleX(${left / total})` }} />
+      </span>
+    </>
+  );
+}
+
 function hash(s: string) {
   let h = 0;
   for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) | 0;
@@ -610,6 +639,7 @@ export function describeEvent(e: GameEvent, v: TableView): string | null {
     case "challenge": return `${who} challenged: ${e.success ? "caught a bluff!" : "it was legal"}`;
     case "accept": return `${who} accepted the penalty`;
     case "reshuffle": return `Discard pile reshuffled into the deck`;
+    case "timeout": return `${who} ran out of time`;
     case "game_over": return e.player === null ? "Game drawn at the turn limit" : `${who} won`;
     default: return null;
   }

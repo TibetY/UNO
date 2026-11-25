@@ -18,6 +18,7 @@ import { parseCard } from "../engine/cards";
 import { randomSeed } from "../engine/rng";
 import { type TableView, type WireView, decodeView, encodeView, viewFromGame } from "../view";
 import { REACTION_COOLDOWN_MS, REACTION_MS, type Reaction, type ReactionId, isReactionId } from "../reactions";
+import type { TurnClock } from "../timer";
 import type { Peer, SharedRoom } from "./transport";
 
 export type OnlineStatus =
@@ -44,6 +45,9 @@ export interface OnlineState {
   sending: boolean;
   /** Reactions currently on screen (seat 0 = host, 1 = guest). */
   reactions: Reaction[];
+  /** Turn timer length in ms (0 = off), and the clock running now. */
+  turnMs: number;
+  clock: TurnClock | null;
   transport: "online" | "local";
 }
 
@@ -55,7 +59,8 @@ export const cleanName = (s: unknown, fallback: string) =>
   typeof s === "string" && s.trim() ? s.trim().replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁠-⁯]/g, "").slice(0, 24) : fallback;
 
 export function makeCode(): string {
-  const abc = "abcdefghjkmnpqrstuvwxyz23456789";
+  // No vowels, so a code can't spell a word.
+  const abc = "bcdfghjkmnpqrstvwxz23456789";
   let s = "";
   for (let i = 0; i < 5; i++) s += abc[Math.floor(Math.random() * abc.length)];
   return s;
@@ -104,7 +109,7 @@ abstract class Session {
   constructor(protected room: SharedRoom, role: "host" | "guest", code: string, name: string) {
     this.state = {
       role, code, status: "connecting", connected: false, wasConnected: false, view: null,
-      myName: name, oppName: "Opponent", score: [0, 0], sending: false, transport: room.kind, reactions: [],
+      myName: name, oppName: "Opponent", score: [0, 0], sending: false, transport: room.kind, reactions: [], turnMs: 0, clock: null,
     };
   }
 
@@ -196,7 +201,16 @@ export class HostSession extends Session {
     }
     const oppName = cleanName(seated?.presence.name, "Opponent");
     const status: OnlineStatus = !this.game ? "waiting" : seated ? "playing" : "opponent-left";
+    const statusChanged = status !== this.state.status;
     this.set({ oppName, status });
+    // The clock pauses while the opponent is away, and restarts when they're back.
+    if (statusChanged && this.game) {
+      this.clockKey = null;
+      window.clearTimeout(this.clockTimer);
+      this.clock = null;
+      if (status === "playing") reseated = true;
+      else this.set({ clock: null });
+    }
     if (seated) this.checkReaction(seated, 1);
     if (seated && !this.game) return this.newGame();
     if (seated) this.handleAct(seated.presence.act);
@@ -254,11 +268,43 @@ export class HostSession extends Session {
         if (JSON.stringify(st).length < MAX_PRESENCE) break;
       }
     }
-    void this.room.presence({ v: this.ver, g: this.guestPeer, st, sc: this.hostScore }).catch(() => {});
+    const clock = this.updateClock();
+    const tm = clock ? { s: clock.seat, left: Math.max(0, clock.deadline - Date.now()), t: clock.total } : null;
+    void this.room.presence({ v: this.ver, g: this.guestPeer, st, sc: this.hostScore, tl: this.turnMs, tm }).catch(() => {});
     this.set({
       view: g ? viewFromGame(g, { you: 0, names }) : null,
       score: [...this.hostScore] as [number, number],
+      turnMs: this.turnMs,
+      clock,
     });
+  }
+
+  // ---- turn timer: the host keeps time for both players
+  private get turnMs() {
+    return Math.max(0, (this.rules.turnSeconds ?? 0) * 1000);
+  }
+  private clockKey: string | null = null;
+  private clock: TurnClock | null = null;
+  private clockTimer: number | undefined;
+
+  /** Start a fresh clock when the turn changes; returns the running clock. */
+  private updateClock(): TurnClock | null {
+    const g = this.game;
+    const key = g && !g.isOver && this.turnMs > 0 && this.state.status === "playing"
+      ? `${g.seed}:${g.uid}:${g.turn}:${g.current}` : null;
+    if (key === this.clockKey) return this.clock;
+    window.clearTimeout(this.clockTimer);
+    this.clockKey = key;
+    this.clock = null;
+    if (!key || !g) return null;
+    this.clock = { seat: g.current, deadline: Date.now() + this.turnMs, total: this.turnMs };
+    this.clockTimer = window.setTimeout(() => {
+      // Only if it's still that turn and the player is still here.
+      if (this.clockKey !== key || this.state.status !== "playing" || !this.game || this.game.isOver) return;
+      this.game.timeout();
+      this.changed();
+    }, this.turnMs);
+    return this.clock;
   }
 }
 
@@ -283,6 +329,8 @@ export class GuestSession extends Session {
   private hostVer = -1;
   private sentFor = -1;
   private sawHost = false;
+  private clockVer = -1;
+  private guestClock: TurnClock | null = null;
   /** The table as it will look once the host confirms our move (shown meanwhile). */
   private predicted: TableView | null = null;
   private sendTimer: number | undefined;
@@ -324,6 +372,13 @@ export class GuestSession extends Session {
     const sc = Array.isArray(pr.sc) && pr.sc.length === 2 ? (pr.sc as number[]).map((x) => Number(x) || 0) : [0, 0];
     const waiting = this.sentFor === this.hostVer;
     if (!waiting) this.settle();
+    if (typeof pr.v === "number" && pr.v !== this.clockVer) {
+      this.clockVer = pr.v;
+      const tm = pr.tm as { s?: unknown; left?: unknown; t?: unknown } | null | undefined;
+      const ok = tm && (tm.s === 0 || tm.s === 1) && typeof tm.left === "number" && typeof tm.t === "number" && tm.t > 0 && tm.t <= 600_000;
+      this.guestClock = ok ? { seat: tm!.s as number, deadline: Date.now() + Math.min(tm!.left as number, tm!.t as number), total: tm!.t as number } : null;
+    }
+    const tl = typeof pr.tl === "number" && pr.tl > 0 && pr.tl <= 600_000 ? pr.tl : 0;
     this.set({
       status: view ? "playing" : "looking",
       oppName,
@@ -331,6 +386,8 @@ export class GuestSession extends Session {
       view: waiting && this.predicted ? this.predicted : view,
       score: [sc[1], sc[0]],
       sending: waiting,
+      turnMs: tl,
+      clock: this.guestClock,
     });
   }
 

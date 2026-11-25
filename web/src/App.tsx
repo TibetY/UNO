@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { HOUSE_RULES, OG_RULES, type Rules } from "./engine/engine";
 import { Card, CustomCardContext, customEffect } from "./components/Card";
+import { TIMER_CHOICES } from "./timer";
 import { OnlinePage } from "./components/OnlinePage";
 import { PlayPage } from "./components/PlayPage";
 import { type RoomProvider, artifactRoomProvider, localRoomProvider } from "./online/transport";
@@ -86,7 +87,8 @@ const RULE_SETS: { id: string; name: string; rules: Rules; blurb: string }[] = [
 ];
 
 function sameRules(a: Rules, b: Rules) {
-  return (Object.keys(b) as (keyof Rules)[]).every((k) => k === "maxTurns" || a[k] === b[k]);
+  // The turn timer is a table setting, not part of a rule set.
+  return (Object.keys(b) as (keyof Rules)[]).every((k) => k === "maxTurns" || k === "turnSeconds" || a[k] === b[k]);
 }
 
 function RulesPanel({ rules, onChange, onReplace }: {
@@ -101,11 +103,21 @@ function RulesPanel({ rules, onChange, onReplace }: {
       <div className="field rule-set">
         <label htmlFor="ruleset">Rule set</label>
         <select id="ruleset" value={set?.id ?? "custom"}
-          onChange={(e) => { const r = RULE_SETS.find((x) => x.id === e.target.value); if (r) onReplace(r.rules); }}>
+          onChange={(e) => { const r = RULE_SETS.find((x) => x.id === e.target.value); if (r) onReplace({ ...r.rules, turnSeconds: rules.turnSeconds }); }}>
           {RULE_SETS.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
           {!set && <option value="custom">Custom (your changes)</option>}
         </select>
         <small className="help">{set ? set.blurb : "Your own mix. Pick a rule set to start over from it."}</small>
+      </div>
+
+      <h4>Turn timer</h4>
+      <div className="rules-grid">
+        <label className="check">Time per turn
+          <select id="turn-timer" value={rules.turnSeconds} onChange={(e) => onChange({ turnSeconds: Number(e.target.value) })}>
+            {TIMER_CHOICES.map((n) => <option key={n} value={n}>{n ? `${n} seconds` : "Off"}</option>)}
+          </select>
+        </label>
+        <p className="help">If a player's time runs out, their turn is forfeited: they draw a card and play passes (or they take a penalty they owe). Bots aren't timed. Online, the host's setting is used.</p>
       </div>
 
       <h4>House rules</h4>

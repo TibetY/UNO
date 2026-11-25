@@ -58,6 +58,8 @@ export interface Rules {
   customSkip: boolean;
   /** Custom card: the opponent draws this many (0 = none). */
   customDraw: number;
+  /** Seconds a human has per turn (0 = no timer). Not a rule of play: the apps enforce it. */
+  turnSeconds: number;
   maxTurns: number;
 }
 
@@ -75,6 +77,7 @@ export const DEFAULT_RULES: Rules = {
   customColor: true,
   customSkip: false,
   customDraw: 10,
+  turnSeconds: 30,
   maxTurns: 1000,
 };
 
@@ -95,7 +98,7 @@ export const HOUSE_RULES: Rules = {
 
 export interface GameEvent {
   t: number;
-  event: "deal" | "start_card" | "play" | "draw" | "pass" | "challenge" | "accept" | "reshuffle" | "game_over";
+  event: "deal" | "start_card" | "play" | "draw" | "pass" | "challenge" | "accept" | "reshuffle" | "timeout" | "game_over";
   player: number | null;
   card?: CardId;
   color?: Color | null;
@@ -311,6 +314,22 @@ export class Game {
   /** With numberFinish, an action card can't be a player's last card. */
   private finishOk(p: number, card: CardId): boolean {
     return !this.rules.numberFinish || this.hands[p].length > 1 || isNumber(parseCard(card).rank);
+  }
+
+  /**
+   * The player to act ran out of time: their turn is forfeited. On a normal
+   * turn they draw a card and play passes (keeping it even if playable); a
+   * drawn card is kept; a multi-card turn ends; a penalty is accepted.
+   */
+  timeout(): void {
+    if (this.isOver) return;
+    const p = this.current;
+    this.log("timeout", p, {});
+    const has = (t: Action["type"]) => this.legalActions().some((a) => a.type === t);
+    if (this.phase === "respond") return this.step({ type: "accept" });
+    if (this.phase === "multi") return this.step({ type: "done" });
+    if (this.phase === "turn" && has("draw")) this.step({ type: "draw" });
+    if (!this.isOver && this.current === p && this.phase === "drew") this.step({ type: "pass" });
   }
 
   // ------------------------------------------------------------ public API

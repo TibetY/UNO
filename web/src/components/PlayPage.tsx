@@ -9,6 +9,7 @@ import { GameLog, Table } from "./Table";
 import { Stage, useImmersive } from "../immersive";
 import { REACTION_COOLDOWN_MS, REACTION_MS, type Reaction, type ReactionId } from "../reactions";
 import { parseCard } from "../engine/cards";
+import { useTurnTimer } from "../timer";
 
 type Opponent = AgentName | "friend";
 const FRIEND_NAMES: [string, string] = ["Player 1", "Player 2"];
@@ -24,7 +25,7 @@ export function PlayPage({ rules }: { rules: Rules }) {
   const [record, setRecord] = useState<[number, number]>([0, 0]);
   const [counted, setCounted] = useState(-1);
   const delay = useCallback((evs: readonly GameEvent[], g: Game) => 750 + dealAnimationMs(evs, g.rules.handSize), []);
-  const { game, start, actMany } = useLocalGame(delay);
+  const { game, start, actMany, timeout } = useLocalGame(delay);
   const { enter } = useImmersive();
 
   // Reactions: yours, and the bot's to what happens at the table.
@@ -50,10 +51,10 @@ export function PlayPage({ rules }: { rules: Rules }) {
     for (const e of game.events.slice(from)) {
       const r = e.event === "play" && e.card ? parseCard(e.card).rank : null;
       const plus = r === "draw2" || r === "wild4" || (r === "custom" && game.rules.customDraw > 0);
-      if (plus && e.player === 0 && Math.random() < 0.45) pick = Math.random() < 0.5 ? "cursing" : "angry";
-      if (plus && e.player === 1 && Math.random() < 0.35) pick = Math.random() < 0.5 ? "devil" : "lol";
+      if (plus && e.player === 0 && Math.random() < 0.45) pick = Math.random() < 0.5 ? "cursing" : "down";
+      if (plus && e.player === 1 && Math.random() < 0.35) pick = "lol";
       if (e.event === "play" && e.player === 0 && (r === "skip" || r === "reverse") && Math.random() < 0.2) pick = "eyeroll";
-      if (e.event === "game_over") pick = e.player === 1 ? "cool" : e.player === 0 ? "crying" : null;
+      if (e.event === "game_over") pick = e.player === 1 ? "trash" : e.player === 0 ? "crying" : null;
     }
     // Not cancelled on re-render: the events were already marked as seen.
     if (pick) window.setTimeout(() => show(1, pick!), 650);
@@ -82,8 +83,21 @@ export function PlayPage({ rules }: { rules: Rules }) {
     }
   }, [game, game?.isOver, counted]);
 
+  // Turn timer: runs for a human whose cards are showing (not the bot, not during a handoff).
+  const seconds = rules.turnSeconds;
+  const humanToMove = !!game && !game.isOver && (hotseat ? revealed === game.current : game.current === 0);
+  const clockKey = humanToMove ? `${game!.seed}:${game!.uid}:${game!.turn}:${game!.current}` : null;
+  const deadline = useTurnTimer(clockKey, seconds, timeout);
+
   if (!game) return null;
   const handoff = hotseat && !game.isOver && revealed !== game.current;
+  const timer = seconds > 0
+    ? {
+        timed: (hotseat ? [true, true] : [true, false]) as [boolean, boolean],
+        total: seconds * 1000,
+        clock: deadline !== null && humanToMove ? { seat: game.current, deadline, total: seconds * 1000 } : null,
+      }
+    : undefined;
   const view = hotseat
     ? viewFromGame(game, { you: game.isOver || handoff ? null : game.current, names: FRIEND_NAMES })
     : viewFromGame(game, { you: 0, names: ["You", opponent === "friend" ? "Friend" : cap(opponent)] });
@@ -92,7 +106,7 @@ export function PlayPage({ rules }: { rules: Rules }) {
   return (
     <section className="layout">
       <Stage>
-        <Table view={view} onActions={actMany} hideHands={handoff}
+        <Table view={view} onActions={actMany} hideHands={handoff} timer={timer}
           reactions={hotseat ? undefined : reactions} onReact={hotseat ? undefined : react}
           gameOverActions={<button className="btn primary" onClick={newGame}>New game</button>} />
         {handoff && (
