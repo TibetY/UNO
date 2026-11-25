@@ -333,11 +333,18 @@ function Hand({ v, seat, small, cardState, onTap }: {
     ro.observe(el);
     return () => ro.disconnect();
   }, [small]);
-  let overlap = 6;
+  // Fit the hand: overlap the cards, and once they'd overlap too much to read
+  // (big hands on phones), stack them into 2 or 3 rows instead.
   const avail = box.width - 24;
-  if (box.card && n > 1 && n * box.card + (n - 1) * 6 > avail) {
-    overlap = Math.max((avail - box.card) / (n - 1) - box.card, -box.card * 0.84);
-  }
+  const overlapFor = (perRow: number) =>
+    box.card && perRow > 1 && perRow * box.card + (perRow - 1) * 6 > avail
+      ? Math.max((avail - box.card) / (perRow - 1) - box.card, -box.card * 0.84)
+      : 6;
+  const readable = (perRow: number) => box.card + overlapFor(perRow) >= box.card * 0.42;
+  let rows = 1;
+  if (!small && hand) while (rows < 3 && !readable(Math.ceil(n / rows))) rows++;
+  const perRow = Math.ceil(n / rows) || 1;
+  const overlap = overlapFor(perRow);
 
   const slots = useRef(new Map<string, HTMLDivElement>());
   const prev = useRef<{ game: string; seat: number; faceUp: boolean; pos: Map<string, { x: number; y: number }>; rects: Map<string, DOMRect>; cards: Map<string, CardId> } | null>(null);
@@ -400,22 +407,28 @@ function Hand({ v, seat, small, cardState, onTap }: {
   const style = { "--overlap": `${overlap}px` } as React.CSSProperties;
   let pendingMarked = false;
   return (
-    <div ref={ref} className={`hand ${small ? "hand-small" : "hand-main"}`} style={style}>
-      {items.map((it) => {
+    <div ref={ref} className={`hand ${small ? "hand-small" : "hand-main"}${rows > 1 ? " rows" : ""}`} style={style}>
+      {items.flatMap((it, i) => {
+        const rowStart = rows > 1 && i % perRow === 0;
+        const lower = rows > 1 && i >= perRow;
+        const slotClass = "slot" + (rowStart ? " row-start" : "") + (lower ? " row-lower" : "");
+        // Line breaks between rows keep every card in one container, so a card
+        // moving to another row glides there instead of being rebuilt.
+        const brk = rowStart && i > 0 ? [<div className="row-break" key={`row-${i / perRow}`} aria-hidden="true" />] : [];
         const setRef = (el: HTMLDivElement | null) => {
           if (el) slots.current.set(it.key, el);
           else slots.current.delete(it.key);
         };
-        if (!hand) return <div className="slot" key={it.key} ref={setRef}><CardBack /></div>;
+        if (!hand) return [...brk, <div className={slotClass} key={it.key} ref={setRef}><CardBack /></div>];
         const st = cardState?.(it) ?? {};
         const isPending = !pendingMarked && v.phase === "drew" && v.current === seat && it.card === v.pending;
         if (isPending) pendingMarked = true;
-        return (
-          <div className="slot" key={it.key} ref={setRef}>
+        return [...brk, (
+          <div className={slotClass} key={it.key} ref={setRef}>
             <Card id={it.card} highlight={isPending} playable={st.playable} dim={st.dim} selected={st.selected} order={st.order}
               onClick={st.playable || st.selected ? () => onTap?.(it) : undefined} />
           </div>
-        );
+        )];
       })}
     </div>
   );

@@ -159,6 +159,12 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 /* Slots carry the motion (gliding, flying in); the card inside carries the lift. */
 .hand .slot { margin-left: var(--overlap, 6px); flex: none; transition: margin .3s ease; will-change: transform; }
 .hand .slot:first-child { margin-left: 0; }
+/* Big hands: rows. Each lower row overlaps the one behind it, which keeps its
+   top (corner index and the top of the emblem) in view. */
+.hand.rows { flex-wrap: wrap; align-content: flex-end; }
+.hand.rows .row-break { flex-basis: 100%; height: 0; }
+.hand.rows .slot.row-start { margin-left: 0; }
+.hand.rows .slot.row-lower { margin-top: calc(var(--cw) * -0.74); }
 .hand .card { transition: transform .22s cubic-bezier(.22, .68, .24, 1), filter .2s; }
 .hand-small .card { width: calc(var(--cw) * .78); font-size: calc(var(--cw) * .78); }
 .hand-main .card.playable { cursor: pointer; transform: translateY(-10px); }
