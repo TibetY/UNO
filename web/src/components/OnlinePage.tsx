@@ -187,6 +187,8 @@ function OnlineGame({ session, onLeave }: { session: AnySession; onLeave: () => 
             view={s.view}
             busy={s.sending || !s.connected}
             onActions={(as) => session.actMany(as)}
+            reactions={s.reactions}
+            onReact={(id) => session.react(id)}
             seatExtra={scoreChips}
             status={s.sending && s.view.current === s.view.you ? "Sending…" : undefined}
             gameOverActions={host

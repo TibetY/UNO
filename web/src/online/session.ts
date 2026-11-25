@@ -17,6 +17,7 @@ import { type Action, Game, type Rules, actionKey } from "../engine/engine";
 import { parseCard } from "../engine/cards";
 import { randomSeed } from "../engine/rng";
 import { type TableView, type WireView, decodeView, encodeView, viewFromGame } from "../view";
+import { REACTION_COOLDOWN_MS, REACTION_MS, type Reaction, type ReactionId, isReactionId } from "../reactions";
 import type { Peer, SharedRoom } from "./transport";
 
 export type OnlineStatus =
@@ -41,6 +42,8 @@ export interface OnlineState {
   score: [number, number];
   /** Guest: a move was sent and the host hasn't answered yet. */
   sending: boolean;
+  /** Reactions currently on screen (seat 0 = host, 1 = guest). */
+  reactions: Reaction[];
   transport: "online" | "local";
 }
 
@@ -101,7 +104,7 @@ abstract class Session {
   constructor(protected room: SharedRoom, role: "host" | "guest", code: string, name: string) {
     this.state = {
       role, code, status: "connecting", connected: false, wasConnected: false, view: null,
-      myName: name, oppName: "Opponent", score: [0, 0], sending: false, transport: room.kind,
+      myName: name, oppName: "Opponent", score: [0, 0], sending: false, transport: room.kind, reactions: [],
     };
   }
 
@@ -123,6 +126,37 @@ abstract class Session {
     for (const l of this.listeners) l();
   }
 
+  // ---- reactions: { emo: { id, n } } in presence; n changes with every new one
+  protected abstract readonly seat: number;
+  private lastSent = 0;
+  private seenEmo = new Map<string, number>();
+
+  /** Send a reaction (also shown here at once). */
+  react(id: ReactionId) {
+    const now = Date.now();
+    if (now - this.lastSent < REACTION_COOLDOWN_MS) return;
+    this.lastSent = now;
+    void this.room.presence({ emo: { id, n: now } }).catch(() => {});
+    this.show(this.seat, id);
+  }
+
+  /** Called with the other player's presence: show their reaction if it's new. */
+  protected checkReaction(peer: Peer, seat: number) {
+    const emo = peer.presence.emo as { id?: unknown; n?: unknown } | undefined;
+    const n = emo && typeof emo.n === "number" ? emo.n : 0;
+    const before = this.seenEmo.get(peer.peer);
+    this.seenEmo.set(peer.peer, n);
+    // The first time we see someone, whatever reaction they sent before is old news.
+    if (before === undefined || n === before || !emo || !isReactionId(emo.id)) return;
+    this.show(seat, emo.id);
+  }
+
+  private show(seat: number, id: ReactionId) {
+    const r: Reaction = { seat, id, key: Date.now() + Math.random() };
+    this.set({ reactions: [...this.state.reactions.filter((x) => x.seat !== seat), r] });
+    window.setTimeout(() => this.set({ reactions: this.state.reactions.filter((x) => x !== r) }), REACTION_MS);
+  }
+
   async leave() {
     keepAwake.release();
     this.unsubs.forEach((u) => u());
@@ -134,6 +168,7 @@ abstract class Session {
 // ------------------------------------------------------------------ host
 
 export class HostSession extends Session {
+  protected readonly seat = 0;
   private game: Game | null = null;
   private ver = 0;
   private guestPeer: string | null = null;
@@ -162,6 +197,7 @@ export class HostSession extends Session {
     const oppName = cleanName(seated?.presence.name, "Opponent");
     const status: OnlineStatus = !this.game ? "waiting" : seated ? "playing" : "opponent-left";
     this.set({ oppName, status });
+    if (seated) this.checkReaction(seated, 1);
     if (seated && !this.game) return this.newGame();
     if (seated) this.handleAct(seated.presence.act);
     if (reseated || (seated && oppName !== this.lastPublishedOpp)) this.publish();
@@ -242,6 +278,7 @@ function validView(w: unknown): w is WireView {
 }
 
 export class GuestSession extends Session {
+  protected readonly seat = 1;
   private hostPeer: string | null = null;
   private hostVer = -1;
   private sentFor = -1;
@@ -271,6 +308,7 @@ export class GuestSession extends Session {
     const seat = typeof pr.g === "string" ? pr.g : null;
     const oppName = cleanName(pr.name, "Host");
     if (seat && seat !== me) return this.set({ status: "full", oppName });
+    this.checkReaction(host, 0);
     if (typeof pr.v === "number") this.hostVer = pr.v;
     const view = validView(pr.st) ? decodeView(pr.st) : null;
     if (view && typeof view.eventBase !== "number") view.eventBase = 0;

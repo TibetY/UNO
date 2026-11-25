@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AGENT_BLURBS, AGENT_NAMES, type AgentName } from "../engine/agents";
 import type { Game, GameEvent, Rules } from "../engine/engine";
 import { dealAnimationMs } from "../anim";
@@ -7,6 +7,8 @@ import { useLocalGame } from "../useLocalGame";
 import { viewFromGame } from "../view";
 import { GameLog, Table } from "./Table";
 import { Stage, useImmersive } from "../immersive";
+import { REACTION_COOLDOWN_MS, REACTION_MS, type Reaction, type ReactionId } from "../reactions";
+import { parseCard } from "../engine/cards";
 
 type Opponent = AgentName | "friend";
 const FRIEND_NAMES: [string, string] = ["Player 1", "Player 2"];
@@ -24,6 +26,37 @@ export function PlayPage({ rules }: { rules: Rules }) {
   const delay = useCallback((evs: readonly GameEvent[], g: Game) => 750 + dealAnimationMs(evs, g.rules.handSize), []);
   const { game, start, actMany } = useLocalGame(delay);
   const { enter } = useImmersive();
+
+  // Reactions: yours, and the bot's to what happens at the table.
+  const [reactions, setReactions] = useState<Reaction[]>([]);
+  const lastReact = useRef(0);
+  const seenEvents = useRef<{ game: string; n: number }>({ game: "", n: 0 });
+  const show = useCallback((seat: number, id: ReactionId) => {
+    const r: Reaction = { seat, id, key: Date.now() + Math.random() };
+    setReactions((rs) => [...rs.filter((x) => x.seat !== seat), r]);
+    window.setTimeout(() => setReactions((rs) => rs.filter((x) => x !== r)), REACTION_MS);
+  }, []);
+  const react = (id: ReactionId) => {
+    if (Date.now() - lastReact.current < REACTION_COOLDOWN_MS) return;
+    lastReact.current = Date.now();
+    show(0, id);
+  };
+  useEffect(() => {
+    if (!game || hotseat) return;
+    const id = `${game.seed}:${game.uid}`;
+    const from = seenEvents.current.game === id ? seenEvents.current.n : game.events.length;
+    seenEvents.current = { game: id, n: game.events.length };
+    let pick: ReactionId | null = null;
+    for (const e of game.events.slice(from)) {
+      const r = e.event === "play" && e.card ? parseCard(e.card).rank : null;
+      const plus = r === "draw2" || r === "wild4" || (r === "custom" && game.rules.customDraw > 0);
+      if (plus && e.player === 0 && Math.random() < 0.45) pick = Math.random() < 0.5 ? "cursing" : "angry";
+      if (plus && e.player === 1 && Math.random() < 0.35) pick = "devil";
+      if (e.event === "game_over") pick = e.player === 1 ? "cool" : e.player === 0 ? "crying" : null;
+    }
+    // Not cancelled on re-render: the events were already marked as seen.
+    if (pick) window.setTimeout(() => show(1, pick!), 650);
+  });
 
   const newGame = () => {
     setHotseat(opponent === "friend");
@@ -59,6 +92,7 @@ export function PlayPage({ rules }: { rules: Rules }) {
     <section className="layout">
       <Stage>
         <Table view={view} onActions={actMany} hideHands={handoff}
+          reactions={hotseat ? undefined : reactions} onReact={hotseat ? undefined : react}
           gameOverActions={<button className="btn primary" onClick={newGame}>New game</button>} />
         {handoff && (
           <div className="handoff" role="dialog" aria-label={`${FRIEND_NAMES[game.current]}'s turn`}>

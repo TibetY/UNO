@@ -3,6 +3,7 @@ import { COLORS, type CardId, type Color, cap, cardLabel, isWild, matches, parse
 import type { Action, GameEvent } from "../engine/engine";
 import type { TableView } from "../view";
 import { Card, CardBack, CustomCardContext } from "./Card";
+import { REACTIONS, type Reaction, type ReactionId, reactionEmoji } from "../reactions";
 import {
   DEAL_STAGGER, EASE, FLIGHT_MS, MotionContext, PLAY_MS, PLAY_STAGGER, SHIFT_MS, dealAnimationMs, drawStagger,
   type TableMotion, flyFrom, reducedMotion,
@@ -24,6 +25,10 @@ interface Props {
   hideGameOver?: boolean;
   /** Show both hands face down (pass-and-play, while the device changes hands). */
   hideHands?: boolean;
+  /** Reactions to show (emoji bubbles by each seat). */
+  reactions?: Reaction[];
+  /** If set, the player can send reactions. */
+  onReact?: (id: ReactionId) => void;
 }
 
 export function playerName(v: TableView, p: number) {
@@ -53,7 +58,7 @@ function canFollow(prev: CardId, next: CardId, multiPlay: boolean): boolean {
   return multiPlay && parseCard(next).rank === p.rank;
 }
 
-export function Table({ view: v0, onActions, busy, status, seatExtra, gameOverActions, hideGameOver, hideHands }: Props) {
+export function Table({ view: v0, onActions, busy, status, seatExtra, gameOverActions, hideGameOver, hideHands, reactions, onReact }: Props) {
   const v = hideHands ? { ...v0, hands: [null, null], legal: [] } : v0;
   const [selected, setSelected] = useState<Keyed[]>([]);
   const [wildChain, setWildChain] = useState<CardId[] | null>(null);
@@ -171,7 +176,7 @@ export function Table({ view: v0, onActions, busy, status, seatExtra, gameOverAc
     <MotionContext.Provider value={motion}>
      <CustomCardContext.Provider value={v.rules}>
       <div className="table">
-        <Seat v={v} seat={top} position="top" extra={seatExtra?.[top]} />
+        <Seat v={v} seat={top} position="top" extra={seatExtra?.[top]} reactions={reactions} />
 
         <div className="center">
           <div className="pile-wrap">
@@ -215,7 +220,7 @@ export function Table({ view: v0, onActions, busy, status, seatExtra, gameOverAc
           )}
         </div>
 
-        <Seat v={v} seat={v.bottom} position="bottom" extra={seatExtra?.[v.bottom]}
+        <Seat v={v} seat={v.bottom} position="bottom" extra={seatExtra?.[v.bottom]} reactions={reactions} onReact={onReact}
           cardState={yourTurn ? (k) => {
             const order = selected.findIndex((s) => s.key === k.key);
             if (order >= 0) return { selected: true, order: order + 1 };
@@ -287,17 +292,39 @@ interface CardState {
   order?: number;
 }
 
-function Seat({ v, seat, position, extra, cardState, onTap }: {
+function Seat({ v, seat, position, extra, cardState, onTap, reactions, onReact }: {
   v: TableView; seat: number; position: "top" | "bottom"; extra?: ReactNode;
   cardState?: (k: Keyed) => CardState; onTap?: (k: Keyed) => void;
+  reactions?: Reaction[]; onReact?: (id: ReactionId) => void;
 }) {
   const active = v.endReason === null && v.current === seat;
+  const [tray, setTray] = useState(false);
+  const mine = (reactions ?? []).filter((r) => r.seat === seat);
   const info = (
-    <div className="seat-info">
-      <span className="seat-dot" />
-      <span className="seat-name">{playerName(v, seat)}</span>
-      <span className="seat-count" aria-label={`${v.handSizes[seat]} cards`}>{v.handSizes[seat]}</span>
-      {extra}
+    <div className="seat-info-wrap">
+      <div className="seat-info">
+        <span className="seat-dot" />
+        <span className="seat-name">{playerName(v, seat)}</span>
+        <span className="seat-count" aria-label={`${v.handSizes[seat]} cards`}>{v.handSizes[seat]}</span>
+        {extra}
+      </div>
+      {onReact && (
+        <button className={"react-btn" + (tray ? " open" : "")} aria-label="Send a reaction" aria-expanded={tray}
+          onClick={() => setTray((t) => !t)}>😊</button>
+      )}
+      {onReact && tray && (
+        <div className="react-tray" role="menu" aria-label="Reactions">
+          {REACTIONS.map((r) => (
+            <button key={r.id} role="menuitem" aria-label={r.label} title={r.label}
+              onClick={() => { onReact(r.id); setTray(false); }}>{r.emoji}</button>
+          ))}
+        </div>
+      )}
+      {mine.map((r) => (
+        <span key={r.key} className={`react-bubble react-${position}`} role="status" aria-label={`${playerName(v, seat)}: ${r.id}`}>
+          {reactionEmoji(r.id)}
+        </span>
+      ))}
     </div>
   );
   return (

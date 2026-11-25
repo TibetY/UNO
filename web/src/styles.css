@@ -260,6 +260,43 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .card .emblem > span { font-family: var(--font-display); }
 .card .corner { font-family: var(--font-display); }
 
+/* ---------------- reactions ---------------- */
+.seat-info-wrap { position: relative; display: flex; align-items: center; gap: 8px; }
+.react-btn {
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,.18); background: rgba(0,0,0,.28);
+  font-size: 18px; line-height: 1; display: grid; place-items: center; padding: 0;
+}
+.react-btn.open { box-shadow: 0 0 0 2px var(--accent); }
+.react-tray {
+  position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); z-index: 40;
+  display: flex; gap: 2px; padding: 6px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line);
+  box-shadow: 0 10px 30px rgba(0,0,0,.5); animation: tray-in .16s ease-out;
+}
+.react-tray button { width: 40px; height: 40px; border: 0; background: none; border-radius: 50%; font-size: 24px; line-height: 1; padding: 0; transition: transform .12s, background .12s; }
+.react-tray button:hover, .react-tray button:focus-visible { background: var(--panel-2); transform: scale(1.18); }
+@keyframes tray-in { from { opacity: 0; transform: translate(-50%, 6px) scale(.96); } }
+.react-bubble {
+  position: absolute; left: 50%; z-index: 35; pointer-events: none; font-size: 46px; line-height: 1;
+  filter: drop-shadow(0 6px 10px rgba(0,0,0,.4)); animation: react-float 2.6s cubic-bezier(.2,.7,.3,1) forwards;
+}
+.react-bottom { bottom: calc(100% + 6px); }
+.react-top { top: calc(100% + 6px); }
+@keyframes react-float {
+  0% { opacity: 0; transform: translateX(-50%) scale(.3); }
+  12% { opacity: 1; transform: translateX(-50%) scale(1.25); }
+  22% { transform: translateX(-50%) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-46px) scale(1); }
+}
+.react-top { animation-name: react-float-down; }
+@keyframes react-float-down {
+  0% { opacity: 0; transform: translateX(-50%) scale(.3); }
+  12% { opacity: 1; transform: translateX(-50%) scale(1.25); }
+  22% { transform: translateX(-50%) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) translateY(30px) scale(1); }
+}
+
 /* ---------------- stage: full-screen table on phones ---------------- */
 .stage { position: relative; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .stage-btn {
@@ -384,8 +421,10 @@ html.immersive body { position: fixed; inset: 0; width: 100%; }
   .seat-bottom { grid-area: bottom; }
   .seat { flex-direction: row; justify-content: center; gap: 12px; }
   .seat-top { padding-left: 84px; }            /* clear of the Menu button */
-  .seat-top .seat-info { order: 2; }            /* opponent's name to the right of their cards */
-  .seat-bottom .seat-info { order: -1; }        /* your name to the left of your cards */
+  .seat-top .seat-info-wrap { order: 2; }       /* opponent's name to the right of their cards */
+  .seat-bottom .seat-info-wrap { order: -1; }   /* your name to the left of your cards */
+  .react-tray { left: 0; transform: none; flex-wrap: wrap; width: 184px; border-radius: 18px; }
+  @keyframes tray-in { from { opacity: 0; transform: translateY(6px); } }
   .seat .hand { flex: 1; min-width: 0; }
   .hand { padding-top: 18px; min-height: calc(var(--cw) * 1.48 + 18px); }
   .hand-small { padding-top: 4px; min-height: calc(var(--cw) * .78 * 1.48 + 4px); }
