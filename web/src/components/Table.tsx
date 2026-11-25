@@ -303,9 +303,24 @@ function Seat({ v, seat, position, extra, cardState, onTap, reactions, onReact, 
 }) {
   const active = v.endReason === null && v.current === seat;
   const [tray, setTray] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  // Tapping anywhere outside the tray (and its button) closes it.
+  useEffect(() => {
+    if (!tray) return;
+    const close = (e: PointerEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setTray(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setTray(false);
+    document.addEventListener("pointerdown", close, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", close, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [tray]);
   const mine = (reactions ?? []).filter((r) => r.seat === seat);
   const info = (
-    <div className="seat-info-wrap">
+    <div className="seat-info-wrap" ref={wrapRef}>
       <div className="seat-info">
         <span className="seat-dot" />
         <span className="seat-name">{playerName(v, seat)}</span>
