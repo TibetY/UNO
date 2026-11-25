@@ -51,7 +51,8 @@ export function PlayPage({ rules }: { rules: Rules }) {
       const r = e.event === "play" && e.card ? parseCard(e.card).rank : null;
       const plus = r === "draw2" || r === "wild4" || (r === "custom" && game.rules.customDraw > 0);
       if (plus && e.player === 0 && Math.random() < 0.45) pick = Math.random() < 0.5 ? "cursing" : "angry";
-      if (plus && e.player === 1 && Math.random() < 0.35) pick = "devil";
+      if (plus && e.player === 1 && Math.random() < 0.35) pick = Math.random() < 0.5 ? "devil" : "lol";
+      if (e.event === "play" && e.player === 0 && (r === "skip" || r === "reverse") && Math.random() < 0.2) pick = "eyeroll";
       if (e.event === "game_over") pick = e.player === 1 ? "cool" : e.player === 0 ? "crying" : null;
     }
     // Not cancelled on re-render: the events were already marked as seen.

@@ -321,7 +321,7 @@ function Seat({ v, seat, position, extra, cardState, onTap, reactions, onReact }
         </div>
       )}
       {mine.map((r) => (
-        <span key={r.key} className={`react-bubble react-${position}`} role="status" aria-label={`${playerName(v, seat)}: ${r.id}`}>
+        <span key={r.key} className="react-bubble" role="status" aria-label={`${playerName(v, seat)}: ${r.id}`}>
           {reactionEmoji(r.id)}
         </span>
       ))}

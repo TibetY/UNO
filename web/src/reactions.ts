@@ -4,10 +4,13 @@ export const REACTIONS = [
   { id: "crying", emoji: "😭", label: "Crying" },
   { id: "cool", emoji: "😎", label: "Cool" },
   { id: "grin", emoji: "😁", label: "Grinning" },
+  { id: "lol", emoji: "😂", label: "Crying laughing" },
+  { id: "eyeroll", emoji: "🙄", label: "Eye roll" },
   { id: "devil", emoji: "😈", label: "Devil" },
   { id: "cursing", emoji: "🤬", label: "Cursing" },
   { id: "down", emoji: "👎", label: "Thumbs down" },
   { id: "up", emoji: "👍", label: "Thumbs up" },
+  { id: "eggplant", emoji: "🍆", label: "Eggplant" },
 ] as const;
 
 export type ReactionId = (typeof REACTIONS)[number]["id"];
