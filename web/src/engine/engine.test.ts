@@ -253,6 +253,15 @@ describe("house rules", () => {
     c.step(play("custom", "blue"));
     expect([c.hands[1].length, c.current]).toEqual([4, 0]);
   });
+  it("C House Rules: no Wild Draw Four challenges", () => {
+    const g = setup(["wild4", "red:1", "yellow:2"], ["green:1"], "red:5", { rules: HOUSE_RULES });
+    g.step(play("wild4", "blue"));
+    // No challenge to offer and nothing to stack: player 1 draws 4 at once and plays next.
+    expect([g.hands[1].length, g.current, g.stats.challenges]).toEqual([5, 1, [0, 0]]);
+    const og = setup(["wild4", "red:1"], ["green:1"], "red:5");
+    og.step(play("wild4", "blue"));
+    expect(og.legalActions().map((x) => x.type)).toEqual(["challenge", "accept"]);
+  });
   it("bots finish games and conserve cards under house rules", () => {
     for (let s = 0; s < 200; s++) {
       const g = playGame([AGENTS.heuristic(), AGENTS.random()], s, s % 2, house);

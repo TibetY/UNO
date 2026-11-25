@@ -81,7 +81,7 @@ export function App() {
 
 const RULE_SETS: { id: string; name: string; rules: Rules; blurb: string }[] = [
   { id: "c-house", name: "C House Rules", rules: HOUSE_RULES,
-    blurb: "Play several of the same card at once, stack +2 on +2 and +4 on +4, no extra turn after a + card, finish only on a number, and 2 custom cards." },
+    blurb: "Play several of the same card at once, stack +2 on +2 and +4 on +4, no extra turn after a + card, no Wild Draw Four challenges, finish only on a number, and 2 custom cards." },
   { id: "og", name: "OG", rules: OG_RULES, blurb: "The official rules." },
 ];
 
@@ -113,6 +113,7 @@ function RulesPanel({ rules, onChange, onReplace }: {
         <label className="check"><input type="checkbox" checked={rules.multiPlay} onChange={(e) => onChange({ multiPlay: e.target.checked })} /> Play several of the same number or symbol in one turn</label>
         <label className="check"><input type="checkbox" checked={rules.stackDraws} onChange={(e) => onChange({ stackDraws: e.target.checked })} /> Stack +2 on +2, or +4 on +4, to pass the penalty on</label>
         <label className="check"><input type="checkbox" checked={rules.plusEndsTurn} onChange={(e) => onChange({ plusEndsTurn: e.target.checked })} /> After a + card your turn is over (no playing again)</label>
+        <label className="check"><input type="checkbox" checked={rules.allowWd4Challenge} onChange={(e) => onChange({ allowWd4Challenge: e.target.checked })} /> Wild Draw Four can be challenged</label>
         <label className="check"><input type="checkbox" checked={rules.numberFinish} onChange={(e) => onChange({ numberFinish: e.target.checked })} /> You can only go out on a number card</label>
       </div>
 
@@ -139,7 +140,6 @@ function RulesPanel({ rules, onChange, onReplace }: {
         <label className="check"><input type="checkbox" checked={rules.drawUntilPlayable} onChange={(e) => onChange({ drawUntilPlayable: e.target.checked })} /> Draw until you get a playable card</label>
         <label className="check"><input type="checkbox" checked={!rules.playDrawnCard} onChange={(e) => onChange({ playDrawnCard: !e.target.checked })} /> A drawn card can't be played the same turn</label>
         <label className="check"><input type="checkbox" checked={rules.wd4Restricted} onChange={(e) => onChange({ wd4Restricted: e.target.checked })} /> Wild Draw Four only when you can't follow the color</label>
-        <label className="check"><input type="checkbox" checked={!rules.allowWd4Challenge} onChange={(e) => onChange({ allowWd4Challenge: !e.target.checked })} /> No Wild Draw Four challenges</label>
         <label className="check">Hand size
           <input type="number" min={1} max={20} value={rules.handSize} onChange={(e) => onChange({ handSize: num(e.target.value, 1, 20, 7) })} />
         </label>

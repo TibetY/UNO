@@ -83,7 +83,15 @@ export const DEFAULT_RULES: Rules = {
 export const OG_RULES: Rules = DEFAULT_RULES;
 
 /** "C House Rules": everything this app adds, switched on. */
-export const HOUSE_RULES: Rules = { ...DEFAULT_RULES, multiPlay: true, stackDraws: true, numberFinish: true, plusEndsTurn: true, customCards: 2 };
+export const HOUSE_RULES: Rules = {
+  ...DEFAULT_RULES,
+  multiPlay: true,
+  stackDraws: true,
+  numberFinish: true,
+  plusEndsTurn: true,
+  allowWd4Challenge: false,
+  customCards: 2,
+};
 
 export interface GameEvent {
   t: number;

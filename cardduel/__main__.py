@@ -26,7 +26,7 @@ def _rules(args) -> Rules:
         play_drawn_card=not args.no_play_drawn,
         draw_until_playable=args.draw_until_playable,
         wd4_restricted=args.wd4_restricted,
-        allow_wd4_challenge=not args.no_challenge,
+        allow_wd4_challenge=not (args.no_challenge or args.house),
         multi_play=args.multi_play or args.house,
         stack_draws=args.stack_draws or args.house,
         number_finish=args.number_finish or args.house,
