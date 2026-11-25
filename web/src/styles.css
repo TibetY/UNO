@@ -368,6 +368,46 @@ html.immersive body { position: fixed; inset: 0; width: 100%; }
   .lobby-or { justify-self: center; }
   .lobby-col .help { min-height: 0; }
 }
+/* Phones turned sideways: short and wide. Use the width: names beside the hands,
+   piles on the left of the middle row with the status and buttons beside them. */
+@media (orientation: landscape) and (max-height: 500px) {
+  :root { --cw: 52px; --radius: 8px; }
+  .table, .stage.immersive .table {
+    min-height: 0; padding: 8px 14px; gap: 4px 16px;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto 1fr auto auto;
+    grid-template-areas: "top top" "center status" "center actions" "bottom bottom";
+  }
+  .stage.immersive .table { padding-left: max(14px, env(safe-area-inset-left, 0px)); padding-right: max(14px, env(safe-area-inset-right, 0px)); }
+  .seat-top { grid-area: top; } .center { grid-area: center; } .status { grid-area: status; align-self: end; }
+  .actionbar { grid-area: actions; align-self: start; min-height: 0; }
+  .seat-bottom { grid-area: bottom; }
+  .seat { flex-direction: row; justify-content: center; gap: 12px; }
+  .seat-top { padding-left: 84px; }            /* clear of the Menu button */
+  .seat-top .seat-info { order: 2; }            /* opponent's name to the right of their cards */
+  .seat-bottom .seat-info { order: -1; }        /* your name to the left of your cards */
+  .seat .hand { flex: 1; min-width: 0; }
+  .hand { padding-top: 18px; min-height: calc(var(--cw) * 1.48 + 18px); }
+  .hand-small { padding-top: 4px; min-height: calc(var(--cw) * .78 * 1.48 + 4px); }
+  .center { gap: 26px; padding: 6px 8px; }
+  .pile-wrap { gap: 14px; }
+  .pile-label { font-size: 11px; }
+  .discard::before { inset: -8px; border-radius: 14px; }
+  .status { font-size: 14px; min-height: 0; }
+  .actionbar .btn { padding: 7px 12px; font-size: 13px; }
+  .stage-btn { top: 6px; }
+  .stage-exit { top: calc(6px + env(safe-area-inset-top, 0px)); }
+  .hand.rows .slot.row-lower { margin-top: calc(var(--cw) * -0.95); }
+  .dialog { padding: 14px 18px; }
+  .dialog h2 { font-size: 20px; margin-bottom: 6px; }
+  .reveal { --cw: 34px; }
+  .handoff h2 { font-size: 26px; }
+  /* The online waiting screen isn't a game table: one centered column. */
+  .table.waiting, .stage.immersive .table.waiting { grid-template-columns: 1fr; grid-template-rows: none; grid-template-areas: none; }
+  .waiting-box { padding: 8px; gap: 6px; }
+  .code { font-size: 44px; padding: 4px 14px 4px 22px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
