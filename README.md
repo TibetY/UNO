@@ -22,7 +22,7 @@ npm run build:artifact   # single self-contained page: web/dist-artifact/card-du
 The app has two tabs:
 
 - **Play**: play against `random`, `greedy` or `heuristic`, or against a friend on the same device.
-- **Online**: play a friend in real time. One player creates a game and shares the 5-character code, and the other joins with it. Both players need to be on the same site.
+- **Online**: play a friend in real time. One player creates a game and taps **Share invite link**, which opens the phone's share menu (Messages, WhatsApp and so on) or copies the link on a computer. The link opens the Online tab with the code filled in. The other player can also type the 5-character code. Both players need to be on the same site.
 
 Bot-vs-bot matches and statistics are on the command line (`python -m cardduel simulate`, `tournament`).
 

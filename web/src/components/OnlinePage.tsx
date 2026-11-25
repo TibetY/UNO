@@ -93,10 +93,22 @@ export function OnlinePage({ provider, rules, initialCode }: Props) {
 }
 
 /** Both players have to be on the same site: games don't cross between hosts. */
+const onClaudePage = () => /claude\.ai$|claudeusercontent|anthropic/.test(location.hostname) || !location.hostname;
+
+/**
+ * A link that opens this site on the Online tab with the code filled in. None
+ * on the claude.ai page (its frame's address isn't the one people open) or when
+ * only same-browser tabs can play.
+ */
+function inviteUrl(code: string, transport: "online" | "local"): string | null {
+  if (transport !== "online" || onClaudePage()) return null;
+  return `${location.origin}${location.pathname}#join-${code}`;
+}
+
 function siteHint(transport: "online" | "local"): string {
   if (transport === "local") return "This copy can only link tabs in this browser.";
   const host = location.hostname;
-  if (/claude\.ai$|claudeusercontent|anthropic/.test(host) || !host) return "You both need to be on this same claude.ai page.";
+  if (onClaudePage()) return "You both need to be on this same claude.ai page.";
   return `You both need to be on ${host}.`;
 }
 
@@ -119,6 +131,30 @@ function OnlineGame({ session, onLeave }: { session: AnySession; onLeave: () => 
   const s = useSyncExternalStore(session.subscribe, session.getState);
   const [copied, setCopied] = useState(false);
   const host = session instanceof HostSession;
+
+  const invite = inviteUrl(s.code, s.transport);
+  const [shared, setShared] = useState("");
+  const share = async () => {
+    if (!invite) return;
+    const text = `Join my Card Duel game! Code: ${s.code}`;
+    // Phones: the share menu (Messages, WhatsApp...). Elsewhere: copy the link.
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Card Duel", text, url: invite });
+        return;
+      } catch (e) {
+        if ((e as Error)?.name === "AbortError") return; // they closed the menu
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(invite);
+      setShared("Link copied. Paste it into a message.");
+    } catch {
+      const el = document.getElementById("invite-link");
+      if (el) window.getSelection()?.selectAllChildren(el);
+      setShared("Select the link and copy it.");
+    }
+  };
 
   const copy = () => {
     navigator.clipboard?.writeText(s.code).then(() => {
@@ -164,7 +200,15 @@ function OnlineGame({ session, onLeave }: { session: AnySession; onLeave: () => 
                 <>
                   <p className="eyebrow">Your game code</p>
                   <button className="code" id="code-text" onClick={copy} title="Copy code">{s.code}</button>
-                  <p className="help">{copied ? "Copied." : "Tap the code to copy it."} Send it to your friend. They choose <b>Online</b>, then <b>Join</b>.</p>
+                  {invite ? (
+                    <>
+                      <button className="btn primary share-btn" onClick={share}>Share invite link</button>
+                      <p className="invite-link" id="invite-link">{invite}</p>
+                      <p className="help">{shared || (copied ? "Code copied." : "Your friend opens the link and taps Join. Or they can type the code under Online.")}</p>
+                    </>
+                  ) : (
+                    <p className="help">{copied ? "Copied." : "Tap the code to copy it."} Send it to your friend. They choose <b>Online</b>, then <b>Join</b>.</p>
+                  )}
                   <p className="pulse">Waiting for an opponent…</p>
                   <p className="help">Keep this screen open and on: your device runs the game. {siteHint(s.transport)}</p>
                 </>
