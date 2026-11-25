@@ -320,18 +320,21 @@ function Seat({ v, seat, position, extra, cardState, onTap, reactions, onReact }
           ))}
         </div>
       )}
-      {mine.map((r) => (
-        <span key={r.key} className="react-bubble" role="status" aria-label={`${playerName(v, seat)}: ${r.id}`}>
-          {reactionEmoji(r.id)}
-        </span>
-      ))}
     </div>
   );
+  // Reactions sit in the open felt: under the opponent's cards on the left,
+  // above yours on the right.
+  const bubbles = mine.map((r) => (
+    <span key={r.key} className={`react-bubble react-${position}`} role="status" aria-label={`${playerName(v, seat)}: ${r.id}`}>
+      {reactionEmoji(r.id)}
+    </span>
+  ));
   return (
     <div className={`seat seat-${position}${active ? " active" : ""}`}>
       {position === "top" && info}
       <Hand v={v} seat={seat} small={position === "top"} cardState={cardState} onTap={onTap} />
       {position === "bottom" && info}
+      {bubbles}
     </div>
   );
 }

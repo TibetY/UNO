@@ -276,12 +276,16 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .react-tray button { width: 40px; height: 40px; border: 0; background: none; border-radius: 50%; font-size: 24px; line-height: 1; padding: 0; transition: transform .12s, background .12s; }
 .react-tray button:hover, .react-tray button:focus-visible { background: var(--panel-2); transform: scale(1.18); }
 @keyframes tray-in { from { opacity: 0; transform: translate(-50%, 6px) scale(.96); } }
-/* A reaction appears beside the player's name, not over their cards. */
+/* Reactions sit in open felt: just under the opponent's cards on the left,
+   just above yours on the right. */
+.seat { position: relative; }
 .react-bubble {
-  position: absolute; top: 50%; left: calc(100% + 10px); margin-top: -22px; z-index: 35; pointer-events: none;
-  font-size: 40px; line-height: 44px; filter: drop-shadow(0 6px 10px rgba(0,0,0,.4));
+  position: absolute; z-index: 35; pointer-events: none;
+  font-size: 46px; line-height: 1; filter: drop-shadow(0 6px 10px rgba(0,0,0,.4));
   animation: react-pop 2.6s cubic-bezier(.2,.7,.3,1) forwards;
 }
+.react-top { top: calc(100% + 14px); left: 7%; }
+.react-bottom { bottom: calc(100% + 4px); right: 7%; }
 @keyframes react-pop {
   0% { opacity: 0; transform: scale(.3); }
   12% { opacity: 1; transform: scale(1.3); }
@@ -418,8 +422,10 @@ html.immersive body { position: fixed; inset: 0; width: 100%; }
   .seat-bottom .seat-info-wrap { order: -1; }   /* your name to the left of your cards */
   .react-tray { left: 0; transform: none; grid-template-columns: repeat(6, 36px); }
   .react-tray button { width: 36px; height: 36px; font-size: 21px; }
-  .seat-top .react-bubble { left: auto; right: calc(100% + 10px); }
-  .seat-bottom .react-bubble { top: auto; bottom: calc(100% + 4px); left: 6px; margin-top: 0; }
+  /* Sideways the deck sits on the left, so both reactions use the open right side. */
+  .react-bubble { font-size: 36px; }
+  .react-top { top: calc(100% + 4px); left: auto; right: 3%; }
+  .react-bottom { bottom: calc(100% + 2px); right: 3%; }
   @keyframes tray-in { from { opacity: 0; transform: translateY(6px); } }
   .seat .hand { flex: 1; min-width: 0; }
   .hand { padding-top: 18px; min-height: calc(var(--cw) * 1.48 + 18px); }
