@@ -131,7 +131,8 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .seat.active .seat-info { box-shadow: 0 0 0 2px var(--accent); }
 /* turn timer: a bar along the bottom of the name tag, plus seconds while running */
 .seat-info { position: relative; overflow: hidden; }
-.timer-bar { position: absolute; left: 14px; right: 14px; bottom: 2px; height: 3px; border-radius: 99px; background: rgba(255,255,255,.12); }
+.seat-info:has(.timer-bar) { padding-bottom: 12px; }
+.timer-bar { position: absolute; left: 14px; right: 14px; bottom: 4px; height: 3px; border-radius: 99px; background: rgba(255,255,255,.12); }
 .timer-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--ok); transform-origin: left; transition: transform .1s linear; }
 .timer-bar.idle > span { background: rgba(255,255,255,.28); }
 .timer-bar.low > span { background: var(--danger); }
@@ -277,22 +278,23 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 
 /* ---------------- reactions ---------------- */
 .seat-info-wrap { position: relative; display: flex; align-items: center; gap: 8px; }
-/* The name tag is centred on its own; the reaction button hangs off its right side. */
+/* Your name tag is centred on its own; the reaction button sits in the corner of the row. */
+.react-corner { position: absolute; right: 6px; bottom: -6px; z-index: 30; }
 .react-btn {
-  position: absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%);
-  width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,.18); background: rgba(0,0,0,.28);
-  font-size: 18px; line-height: 1; display: grid; place-items: center; padding: 0;
+  width: 50px; height: 50px; border-radius: 50%; border: 1px solid rgba(255,255,255,.2); background: rgba(0,0,0,.3);
+  font-size: 28px; line-height: 1; display: grid; place-items: center; padding: 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,.3);
 }
 .react-btn.open { box-shadow: 0 0 0 2px var(--accent); }
 .react-tray {
-  position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); z-index: 40;
+  position: absolute; bottom: calc(100% + 10px); right: 0; z-index: 40;
   display: grid; grid-template-columns: repeat(4, 44px); gap: 2px; padding: 6px; border-radius: 18px;
   background: var(--panel); border: 1px solid var(--line);
   box-shadow: 0 10px 30px rgba(0,0,0,.5); animation: tray-in .16s ease-out;
 }
 .react-tray button { width: 44px; height: 44px; border: 0; background: none; border-radius: 50%; font-size: 24px; line-height: 1; padding: 0; transition: transform .12s, background .12s; }
 .react-tray button:hover, .react-tray button:focus-visible { background: var(--panel-2); transform: scale(1.18); }
-@keyframes tray-in { from { opacity: 0; transform: translate(-50%, 6px) scale(.96); } }
+@keyframes tray-in { from { opacity: 0; transform: translateY(6px) scale(.96); } }
 /* Reactions sit in open felt: just under the opponent's cards on the left,
    just above yours on the right. */
 .seat { position: relative; }
@@ -437,8 +439,10 @@ html.immersive body { position: fixed; inset: 0; width: 100%; }
   .seat-top { padding-left: 84px; }            /* clear of the Menu button */
   .seat-top .seat-info-wrap { order: 2; }       /* opponent's name to the right of their cards */
   .seat-bottom .seat-info-wrap { order: -1; }   /* your name to the left of your cards */
-  .react-tray { left: 0; transform: none; grid-template-columns: repeat(4, 36px); }
-  .react-btn { position: static; transform: none; }  /* sideways the tag sits at the left edge: keep the button beside it */
+  .react-tray { left: 0; right: auto; grid-template-columns: repeat(4, 36px); }
+  /* Sideways the bottom-right corner holds your last cards: keep the button beside the name tag. */
+  .react-corner { position: relative; right: auto; bottom: auto; order: -1; }
+  .react-btn { width: 42px; height: 42px; font-size: 23px; }
   .react-tray button { width: 36px; height: 36px; font-size: 21px; }
   /* Sideways the deck sits on the left, so both reactions use the open right side. */
   .react-bubble { font-size: 36px; }

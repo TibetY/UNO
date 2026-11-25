@@ -320,7 +320,7 @@ function Seat({ v, seat, position, extra, cardState, onTap, reactions, onReact, 
   }, [tray]);
   const mine = (reactions ?? []).filter((r) => r.seat === seat);
   const info = (
-    <div className="seat-info-wrap" ref={wrapRef}>
+    <div className="seat-info-wrap">
       <div className="seat-info">
         <span className="seat-dot" />
         <span className="seat-name">{playerName(v, seat)}</span>
@@ -330,11 +330,14 @@ function Seat({ v, seat, position, extra, cardState, onTap, reactions, onReact, 
           <TimerBar total={timer.total} deadline={timer.clock?.seat === seat ? timer.clock.deadline : null} />
         )}
       </div>
-      {onReact && (
-        <button className={"react-btn" + (tray ? " open" : "")} aria-label="Send a reaction" aria-expanded={tray}
-          onClick={() => setTray((t) => !t)}>😊</button>
-      )}
-      {onReact && tray && (
+    </div>
+  );
+  // The reaction button lives in the corner of your row, apart from your name tag.
+  const corner = onReact && (
+    <div className="react-corner" ref={wrapRef}>
+      <button className={"react-btn" + (tray ? " open" : "")} aria-label="Send a reaction" aria-expanded={tray}
+        onClick={() => setTray((t) => !t)}>😊</button>
+      {tray && (
         <div className="react-tray" role="menu" aria-label="Reactions">
           {REACTIONS.map((r) => (
             <button key={r.id} role="menuitem" aria-label={r.label} title={r.label}
@@ -356,6 +359,7 @@ function Seat({ v, seat, position, extra, cardState, onTap, reactions, onReact, 
       {position === "top" && info}
       <Hand v={v} seat={seat} small={position === "top"} cardState={cardState} onTap={onTap} />
       {position === "bottom" && info}
+      {corner}
       {bubbles}
     </div>
   );
